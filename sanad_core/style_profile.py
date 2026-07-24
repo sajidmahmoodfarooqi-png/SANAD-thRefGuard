@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import xml.etree.ElementTree as ET
+from functools import lru_cache
 from pathlib import Path
 
 import citeproc_styles
@@ -256,7 +257,30 @@ def patch_csl_style(base_style_id: str, overrides: dict) -> str:
     MVP_SPEC.md "Honest challenges"). Everything else in csl_overrides is
     accepted but not yet wired; this is the intended v1.x expansion point.
     """
+    ov = overrides or {}
+    return _patched_style_path(
+        base_style_id,
+        ov.get("et_al_min"), ov.get("et_al_use_first"),
+        ov.get("ampersand_in_text"), ov.get("ampersand_in_bibliography"),
+    )
+
+
+@lru_cache(maxsize=64)
+def _patched_style_path(base_style_id, et_al_min, et_al_use_first, amp_text, amp_bib):
+    """Build (once, then cache) the patched CSL file for a given set of the
+    overrides that actually affect rendering. Repeated renders under the same
+    profile reuse the same file instead of re-writing it. Keyed only on the
+    overrides that change output, so it stays hashable and correct."""
     base_path = citeproc_styles.get_style_filepath(base_style_id)
+    overrides = {}
+    if et_al_min is not None:
+        overrides["et_al_min"] = et_al_min
+    if et_al_use_first is not None:
+        overrides["et_al_use_first"] = et_al_use_first
+    if amp_text is not None:
+        overrides["ampersand_in_text"] = amp_text
+    if amp_bib is not None:
+        overrides["ampersand_in_bibliography"] = amp_bib
     if not overrides:
         return base_path
 

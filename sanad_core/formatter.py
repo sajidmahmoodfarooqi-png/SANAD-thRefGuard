@@ -10,12 +10,22 @@ Two responsibilities kept sharply separate, per MVP_SPEC.md §5:
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
 from citeproc import Citation, CitationItem, CitationStylesBibliography, CitationStylesStyle
 from citeproc import formatter as cp_formatter
 from citeproc.source.json import CiteProcJSON
 
 from . import style_profile as sp_module
+
+
+@lru_cache(maxsize=32)
+def _load_style(style_path: str) -> CitationStylesStyle:
+    """Parse a CSL style once and reuse it. Parsing the CSL XML is the dominant
+    cost of rendering; the parsed style is a read-only template safe to share
+    across bibliographies (each bibliography keeps its own citation registry),
+    so a scan over a large library no longer re-parses the style per entry."""
+    return CitationStylesStyle(style_path, validate=False)
 
 # --------------------------------------------------------------------------- #
 # Known citeproc-py rendering artifacts, fixed here rather than trusted
@@ -52,7 +62,7 @@ class Formatter:
         style_path = sp_module.patch_csl_style(
             self.profile["based_on_csl"], self.profile.get("csl_overrides") or {}
         )
-        self.style = CitationStylesStyle(style_path, validate=False)
+        self.style = _load_style(style_path)
         self.source = CiteProcJSON(csl_items)
         self.bibliography = CitationStylesBibliography(
             self.style, self.source, cp_formatter.plain
