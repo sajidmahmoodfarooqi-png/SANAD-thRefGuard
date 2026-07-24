@@ -18,10 +18,10 @@
     "productName": "SANAD",
     "files": ["main.js", "preload.js", "renderer/**/*"],
     "extraResources": [
-      { "from": "../sanad_core", "to": "sanad_core" }
+      { "from": "../packaging/dist", "to": "core" }
     ],
-    "win": { "icon": "../assets/branding/sanad-icon.ico" },
-    "mac": { "icon": "../assets/branding/sanad-icon.icns" },
-    "linux": { "icon": "../assets/branding/icon-512.png", "category": "Office" }
+    "win": { "icon": "../assets/branding/sanad-icon.ico", "target": ["nsis"] },
+    "mac": { "icon": "../assets/branding/sanad-icon.icns", "target": ["dmg"], "category": "public.app-category.productivity" },
+    "linux": { "icon": "../assets/branding/icon-512.png", "target": ["AppImage"], "category": "Office" }
   }
 }

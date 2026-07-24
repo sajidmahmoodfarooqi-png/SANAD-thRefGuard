@@ -13,18 +13,30 @@ const path = require("path");
 const CORE_PORT = 23890;
 const CORE_URL = `http://127.0.0.1:${CORE_PORT}`;
 // dev layout: app/ sits next to sanad_core/ in the repo. Packaged layout: the
-// Core is copied into resources/ (see package.json build.extraResources).
+// frozen Core binary is shipped in resources/core/ (see package.json build).
 const DEV_ROOT = path.join(__dirname, "..");
-const CORE_CWD = app.isPackaged ? process.resourcesPath : DEV_ROOT;
 
 let coreProc = null;
 let win = null;
 
-function startCore() {
+function coreLaunch() {
+  // packaged: the frozen Core binary shipped in resources/core/. dev: system Python.
+  if (app.isPackaged) {
+    const exe = process.platform === "win32" ? "sanad-core.exe" : "sanad-core";
+    return { cmd: path.join(process.resourcesPath, "core", exe), args: [], cwd: process.resourcesPath };
+  }
   const py = process.env.SANAD_PYTHON || (process.platform === "win32" ? "python" : "python3");
-  coreProc = spawn(py, ["-m", "sanad_core.server"], {
-    cwd: CORE_CWD,
-    env: { ...process.env, PYTHONUTF8: "1" },
+  return { cmd: py, args: ["-m", "sanad_core.server"], cwd: DEV_ROOT };
+}
+
+function startCore() {
+  const { cmd, args, cwd } = coreLaunch();
+  const env = { ...process.env, PYTHONUTF8: "1" };
+  // packaged installs keep the library in the per-user data dir, not next to the app
+  if (app.isPackaged) env.SANAD_DB = path.join(app.getPath("userData"), "library.db");
+  coreProc = spawn(cmd, args, {
+    cwd,
+    env,
     stdio: ["ignore", "pipe", "pipe"],
   });
   coreProc.stdout.on("data", (d) => process.stdout.write(`[core] ${d}`));
