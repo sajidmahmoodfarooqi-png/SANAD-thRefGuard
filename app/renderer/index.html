@@ -57,6 +57,8 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h10M4 18h13"/><circle cx="18" cy="12" r="2"/><circle cx="9" cy="18" r="2"/></svg> Style profiles <span class="count" id="navStyleCount"></span></button>
           <button class="nav" data-screen="settings">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.5 2h-4l-.4 2.6a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1z"/></svg> Settings</button>
+          <button class="nav" data-screen="help">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7"/><path d="M12 17h.01"/></svg> Help</button>
         </div>
         <div class="side-spacer"></div>
         <div class="corecard" id="coreCard">
@@ -154,6 +156,54 @@
           <div class="setcard">
             <div class="setrow2"><span>Appearance</span><span class="v">follows your system light / dark theme</span></div>
             <div class="setrow2"><span>Languages</span><span class="v">English · اردو / العربية (right-to-left)</span></div>
+          </div>
+        </section>
+
+        <!-- HELP -->
+        <section class="screen help" id="help" hidden>
+          <div class="help-wrap">
+            <h3>Help &amp; how-to</h3>
+            <p class="lede">SANAD checks that each citation is <em>right</em> — the right source, cited in the right place — formats to your university's handbook, and never edits a word of your prose. Everything runs on your own machine.</p>
+
+            <h4>Getting started</h4>
+            <ol>
+              <li>Open <b>Library → Add source</b> and paste your references (RIS or BibTeX). New to it? Choose <b>Load a small sample set</b>.</li>
+              <li>Build a <b>Style profile</b> that matches your university's format.</li>
+              <li>From Word or LibreOffice, insert citations and run the <b>Integrity check</b>.</li>
+            </ol>
+
+            <h4>Importing references</h4>
+            <p>Use <b>RIS</b> or <b>BibTeX</b> (both export from any reference manager), or a plain numbered <b>Typed list</b>. SANAD stores everything locally and de-duplicates safely: re-importing the same reference collapses to one entry, but two genuinely different works are never silently merged — likely duplicates are flagged for you to review (rule R6).</p>
+
+            <h4>What the integrity check catches</h4>
+            <p>After a citation <em>looks</em> right, SANAD checks whether it <em>is</em> right. Every finding explains itself and offers actions; nothing is ever changed automatically. Press <b>Run a demo check</b> on the Integrity screen to see it work.</p>
+            <table class="help-table">
+              <thead><tr><th>Rule</th><th>What it catches</th><th>What to do</th></tr></thead>
+              <tbody>
+                <tr><td><b>R1</b> Year mismatch</td><td>The year you typed doesn't match the source in your library.</td><td>Pick the correct year.</td></tr>
+                <tr><td><b>R2</b> Venue looks wrong</td><td>A book resolved to a <em>review of</em> the book, not the book itself.</td><td>Re-resolve the source.</td></tr>
+                <tr><td><b>R3</b> Orphaned citation</td><td>A citation points to a source no longer in your library.</td><td>Relink it, or remove it.</td></tr>
+                <tr><td><b>R4</b> Cited not listed</td><td>A source in a grouped citation would drop out of the reference list.</td><td>Restore the missing source.</td></tr>
+                <tr><td><b>R5</b> Listed not cited</td><td>A reference sits in the list but nothing cites it.</td><td>Cite it, or remove it.</td></tr>
+                <tr><td><b>R6</b> Possible duplicate</td><td>Two library entries look like the same work.</td><td>Merge, or keep both.</td></tr>
+                <tr><td><b>R7</b> Ambiguous author/year</td><td>Two sources share author + year with no a/b suffix.</td><td>Add a/b suffixes.</td></tr>
+                <tr><td><b>R8</b> Cited out of context</td><td>The sentence is about one topic but cites an unrelated source — a closer one may be in your library.</td><td>Review the suggestion. <em>SANAD suggests, you decide.</em></td></tr>
+              </tbody>
+            </table>
+
+            <h4>The "never touches your prose" guarantee</h4>
+            <p>SANAD only ever writes inside its own citation and bibliography fields — it has no way to change your sentences, and this is enforced in code, not just promised. Even if SANAD is closed or uninstalled, your citations stay as ordinary, readable text; they never turn into broken links.</p>
+
+            <h4>Your data &amp; privacy</h4>
+            <p>Everything is local. Your library is a single file on your machine; the engine listens only on <span class="mono">127.0.0.1</span> and makes no outbound connections. No account, no cloud, no telemetry.</p>
+
+            <h4>Troubleshooting</h4>
+            <ul>
+              <li><b>Status light is red.</b> The engine didn't start — quit and reopen SANAD. If it persists, another program may be using port 23890.</li>
+              <li><b>Import did nothing.</b> Check the format matches what you pasted; a plain numbered list should use <b>Typed list</b>.</li>
+              <li><b>R8 says "semantic check: off".</b> The optional semantic model isn't installed, so SANAD used a lighter word-overlap check — still useful, just less sensitive to paraphrases.</li>
+            </ul>
+            <p class="help-foot">Full guide: <span class="mono">docs/USER_GUIDE.md</span> · SANAD is free and open-source (AGPLv3).</p>
           </div>
         </section>
       </main>

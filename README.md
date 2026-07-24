@@ -45,6 +45,14 @@ python -m sanad_core.server # start the local Core service on 127.0.0.1:23890
 The Tier-B semantic check uses a local sentence-transformers model when installed and degrades to
 a deterministic lexical fallback otherwise; the scan reports which backend actually ran.
 
+## Documentation
+
+- [docs/USER_GUIDE.md](docs/USER_GUIDE.md) — complete help & how-to (also available
+  inside the app under **Help**).
+- [docs/AUDIT.md](docs/AUDIT.md) — critical readiness audit (build, UX, integrity,
+  performance, security) and a market comparison.
+- [CONCEPT.md](CONCEPT.md) — product vision · [MVP_SPEC.md](MVP_SPEC.md) — technical spec.
+
 ## License
 
 GNU Affero General Public License v3.0 — see [LICENSE](LICENSE).
