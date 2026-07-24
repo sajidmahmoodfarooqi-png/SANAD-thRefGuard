@@ -29,7 +29,10 @@ def client(tmp_path):
     # a real temp-file DB so state persists across requests (":memory:" would
     # not -- each connection would see a fresh empty database)
     app = create_app(tmp_path / "sanad_test.db")
-    return TestClient(app)
+    c = TestClient(app)
+    c.headers.update({"Authorization": f"Bearer {app.state.token}"})
+    c.sanad_token = app.state.token  # for WebSocket query-param auth
+    return c
 
 
 @pytest.fixture
@@ -55,6 +58,45 @@ def test_health(client):
     assert body["status"] == "ok"
     assert body["service"] == "sanad-core"
     assert body["version"]
+    assert "db_path" not in body  # never leak the library path on the open probe
+
+
+# -- security --------------------------------------------------------------- #
+
+def test_protected_endpoints_require_token(tmp_path):
+    app = create_app(tmp_path / "auth.db")
+    raw = TestClient(app)  # no Authorization header
+    assert raw.get("/v1/health").status_code == 200          # liveness is open
+    assert raw.get("/v1/library/search").status_code == 401   # everything else isn't
+    assert raw.post("/v1/library/import",
+                    json={"format": "ris", "text": "x"}).status_code == 401
+
+
+def test_wrong_token_is_rejected(tmp_path):
+    app = create_app(tmp_path / "auth2.db")
+    c = TestClient(app)
+    c.headers.update({"Authorization": "Bearer not-the-token"})
+    assert c.get("/v1/library/search").status_code == 401
+
+
+def test_foreign_host_header_is_rejected(client):
+    # DNS-rebinding defence: a Host the Core doesn't own is refused outright
+    r = client.get("/v1/health", headers={"host": "evil.example.com"})
+    assert r.status_code == 400
+
+
+def test_websocket_requires_token(client):
+    import pytest as _pytest
+    from starlette.websockets import WebSocketDisconnect
+    with _pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/v1/events") as ws:  # no ?token=
+            ws.receive_json()
+
+
+def test_import_too_large_is_413(seeded):
+    huge = "TY  - BOOK\n" + ("x" * 8_000_001)
+    r = seeded.post("/v1/library/import", json={"format": "ris", "text": huge})
+    assert r.status_code == 413
 
 
 def test_import_and_search(seeded):
@@ -321,7 +363,7 @@ def test_handbook_parse_is_501(seeded):
 # -- websocket -------------------------------------------------------------- #
 
 def test_events_websocket_connect_and_ping(client):
-    with client.websocket_connect("/v1/events") as ws:
+    with client.websocket_connect(f"/v1/events?token={client.sanad_token}") as ws:
         hello = ws.receive_json()
         assert hello["type"] == "connected"
         ws.send_text("ping")

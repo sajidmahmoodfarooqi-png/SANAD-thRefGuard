@@ -3,9 +3,12 @@
 // every list below reflects what the Core actually holds.
 
 const CORE = (window.sanadShell && window.sanadShell.coreUrl) || "http://127.0.0.1:23890";
+const TOKEN = (window.sanadShell && window.sanadShell.token) || "";
 
 async function api(path, opts) {
-  const r = await fetch(CORE + path, { headers: { "Content-Type": "application/json" }, ...opts });
+  const headers = { "Content-Type": "application/json" };
+  if (TOKEN) headers["Authorization"] = "Bearer " + TOKEN;
+  const r = await fetch(CORE + path, { headers, ...opts });
   if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
   return r.status === 204 ? null : r.json();
 }

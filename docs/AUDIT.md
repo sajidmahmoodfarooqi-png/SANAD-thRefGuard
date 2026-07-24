@@ -214,3 +214,19 @@ gaps are closed.
 8. Real **RTL app layout**, accessibility pass, onboarding (§2).
 9. PDF handling / browser capture / optional sync (§6) — or a deliberate decision
    to stay lean and position as a verifier.
+
+---
+
+## 8. Fix log (post-audit)
+
+Tracking the audit's findings as they are closed.
+
+- **§5.1 Unauthenticated Core + broad CORS — FIXED.** The Core now requires a
+  per-launch **bearer session token** on every `/v1` request (401 otherwise);
+  the launcher generates it and hands it to both the Core and the renderer, and
+  it is written to a `0600` token file for the add-in. Added a **Host-header
+  allow-list** (TrustedHostMiddleware) to defeat DNS-rebinding, a **WebSocket
+  token check**, and an **import size cap** (§5.2). The health probe no longer
+  leaks the library path. Covered by tests: token-required, wrong-token,
+  foreign-host-rejected, WS-requires-token, import-413. This was the top
+  must-fix blocker.

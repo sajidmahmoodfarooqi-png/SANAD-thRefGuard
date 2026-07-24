@@ -13,16 +13,24 @@ results:
 """
 from __future__ import annotations
 
+import os
+import secrets
+import stat
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from . import __version__, db, documents, embedding, importer, integrity
 from . import style_profile as sp
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 23890
+# an import body larger than this is refused (memory-exhaustion guard). 8 MB of
+# RIS/BibTeX is tens of thousands of references -- far beyond any real paste.
+MAX_IMPORT_CHARS = 8_000_000
 
 
 # --------------------------------------------------------------------------- #
@@ -88,6 +96,32 @@ class EventHub:
 
 
 # --------------------------------------------------------------------------- #
+# session token file (so a local add-in can authenticate)
+# --------------------------------------------------------------------------- #
+
+def _token_file_path(db_path) -> str:
+    override = os.environ.get("SANAD_TOKEN_FILE")
+    if override:
+        return override
+    return str(Path(str(db_path)).resolve().parent / "sanad.token")
+
+
+def _write_token_file(db_path, token: str) -> None:
+    """Write the session token to a 0600 file next to the library so a legitimate
+    local client (the editor add-in) can read it. Best-effort; never fatal."""
+    try:
+        p = Path(_token_file_path(db_path))
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(token, encoding="utf-8")
+        try:
+            os.chmod(p, stat.S_IRUSR | stat.S_IWUSR)  # rw for owner only
+        except OSError:
+            pass
+    except OSError:
+        pass
+
+
+# --------------------------------------------------------------------------- #
 # app factory
 # --------------------------------------------------------------------------- #
 
@@ -96,18 +130,49 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
     app.state.db_path = str(db_path)
     app.state.events = EventHub()
 
-    # Local clients call this Core cross-origin: the desktop shell's renderer is a
-    # file:// page (Origin: null), and the Word/LibreOffice add-in is served from
-    # some https://localhost:<port>. The Core binds only to 127.0.0.1, so it is
-    # never network-reachable; CORS is scoped to loopback + file:// origins, never
-    # opened to arbitrary websites.
+    # --- security -------------------------------------------------------------
+    # A researcher's work depends on this data being trustworthy, so the Core is
+    # not left as an open localhost service. Three layers:
+    #   1. A per-process bearer TOKEN (primary control). Every /v1 request must
+    #      present it; a page or process that doesn't know it gets 401. The token
+    #      is provided by the launcher via SANAD_TOKEN, or generated here, and is
+    #      also written to a 0600 token file so a legitimate local client (the
+    #      editor add-in) can read it. An attacker cannot know it, and browsers
+    #      never auto-send an Authorization header, so cross-site forgery fails.
+    #   2. A strict Host-header allow-list, to defeat DNS-rebinding.
+    #   3. CORS scoped to loopback / file:// origins as defence in depth.
+    token = os.environ.get("SANAD_TOKEN") or secrets.token_urlsafe(32)
+    app.state.token = token
+    _write_token_file(db_path, token)
+    app.state.token_file = _token_file_path(db_path)
+
+    async def _auth(request: Request, call_next):
+        # preflight and the liveness probe are open; everything else needs the token
+        if request.method == "OPTIONS" or request.url.path == "/v1/health":
+            return await call_next(request)
+        if not secrets.compare_digest(request.headers.get("authorization", ""),
+                                      f"Bearer {token}"):
+            return JSONResponse({"detail": "unauthorized"}, status_code=401)
+        return await call_next(request)
+
     from fastapi.middleware.cors import CORSMiddleware
+    from starlette.middleware.trustedhost import TrustedHostMiddleware
+
+    # add order matters: last-added runs outermost. We want
+    # TrustedHost -> CORS -> auth -> routes.
+    app.add_middleware(BaseHTTPMiddleware, dispatch=_auth)
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|null|file://)$",
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
+    )
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=["127.0.0.1", "localhost",
+                       f"127.0.0.1:{DEFAULT_PORT}", f"localhost:{DEFAULT_PORT}",
+                       "testserver"],  # testserver: FastAPI TestClient's Host
     )
 
     def get_conn():
@@ -117,11 +182,11 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
         finally:
             conn.close()
 
-    # -- health ------------------------------------------------------------- #
+    # -- health (unauthenticated liveness; reveals nothing sensitive) -------- #
     @app.get("/v1/health")
     def health():
         return {"status": "ok", "service": "sanad-core", "version": __version__,
-                "db_path": app.state.db_path}
+                "auth": "required"}
 
     # -- library ------------------------------------------------------------ #
     @app.get("/v1/library/search")
@@ -130,6 +195,8 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
 
     @app.post("/v1/library/import")
     def library_import(req: ImportRequest, conn=Depends(get_conn)):
+        if len(req.text) > MAX_IMPORT_CHARS:
+            raise HTTPException(413, f"import too large (>{MAX_IMPORT_CHARS} chars)")
         fmt = req.format.lower()
         if fmt == "ris":
             ids = importer.import_ris_text(conn, req.text)
@@ -256,6 +323,11 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
     # -- events (server -> add-in push channel) ----------------------------- #
     @app.websocket("/v1/events")
     async def events(ws: WebSocket):
+        # a browser WebSocket cannot set an Authorization header, so the token
+        # is passed as a query parameter (?token=...) and checked before accept.
+        if not secrets.compare_digest(ws.query_params.get("token", ""), token):
+            await ws.close(code=1008)  # policy violation
+            return
         await ws.accept()
         app.state.events.register(ws)
         await ws.send_json({"type": "connected", "service": "sanad-core",

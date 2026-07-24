@@ -28,3 +28,7 @@ packaging/build/
 packaging/dist/
 packaging/*.spec
 app/dist/
+
+# Core session token (per-launch, never committed)
+*.token
+sanad.token

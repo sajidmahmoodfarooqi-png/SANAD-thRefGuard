@@ -10,8 +10,19 @@
 const CORE = "http://127.0.0.1:23890";
 const $ = (id) => document.getElementById(id);
 
+// The Core requires a per-launch session token. The user pastes it once (from the
+// desktop app's Settings, or the sanad.token file next to the library) into the
+// add-in's connect field; it is kept in this document's own settings.
+function coreToken() {
+  return (Office.context.document.settings.get("sanadToken") || "").trim();
+}
+
 async function core(path, opts) {
-  const r = await fetch(CORE + path, { headers: { "Content-Type": "application/json" }, ...opts });
+  const headers = { "Content-Type": "application/json" };
+  const t = coreToken();
+  if (t) headers["Authorization"] = "Bearer " + t;
+  const r = await fetch(CORE + path, { headers, ...opts });
+  if (r.status === 401) throw new Error("Not connected: paste your SANAD token in the add-in settings.");
   if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
   return r.status === 204 ? null : r.json();
 }

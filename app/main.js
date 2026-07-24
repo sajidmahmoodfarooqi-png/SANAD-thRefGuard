@@ -9,9 +9,14 @@
 const { app, BrowserWindow, shell } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
+const crypto = require("crypto");
 
 const CORE_PORT = 23890;
 const CORE_URL = `http://127.0.0.1:${CORE_PORT}`;
+// A per-launch session token. The Core requires it on every request; we hand the
+// same value to the Core (env) and the renderer (preload). Nothing else can know
+// it, so no other local process or web page can drive the user's library.
+const TOKEN = crypto.randomBytes(24).toString("hex");
 // dev layout: app/ sits next to sanad_core/ in the repo. Packaged layout: the
 // frozen Core binary is shipped in resources/core/ (see package.json build).
 const DEV_ROOT = path.join(__dirname, "..");
@@ -31,7 +36,7 @@ function coreLaunch() {
 
 function startCore() {
   const { cmd, args, cwd } = coreLaunch();
-  const env = { ...process.env, PYTHONUTF8: "1" };
+  const env = { ...process.env, PYTHONUTF8: "1", SANAD_TOKEN: TOKEN };
   // packaged installs keep the library in the per-user data dir, not next to the app
   if (app.isPackaged) env.SANAD_DB = path.join(app.getPath("userData"), "library.db");
   coreProc = spawn(cmd, args, {
@@ -70,6 +75,7 @@ function createWindow(coreReady) {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      additionalArguments: [`--sanad-core=${CORE_URL}`, `--sanad-token=${TOKEN}`],
     },
   });
   win.removeMenu();
