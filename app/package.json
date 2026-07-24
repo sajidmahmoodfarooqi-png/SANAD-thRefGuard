@@ -1,0 +1,27 @@
+{
+  "name": "sanad-refguard",
+  "productName": "SANAD",
+  "version": "0.1.0",
+  "description": "SANAD the RefGuard — a local-first citation companion",
+  "license": "AGPL-3.0-or-later",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "pk.sanad.refguard",
+    "productName": "SANAD",
+    "files": ["main.js", "preload.js", "renderer/**/*"],
+    "extraResources": [
+      { "from": "../sanad_core", "to": "sanad_core" }
+    ],
+    "win": { "icon": "../assets/branding/sanad-icon.ico" },
+    "mac": { "icon": "../assets/branding/sanad-icon.icns" },
+    "linux": { "icon": "../assets/branding/icon-512.png", "category": "Office" }
+  }
+}

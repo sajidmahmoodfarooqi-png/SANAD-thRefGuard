@@ -18,3 +18,7 @@ __pycache__/
 ~$*
 Thumbs.db
 .DS_Store
+
+# ── SANAD Core runtime database (per-install) ──────────────────────────────
+*.db
+sanad_library.db

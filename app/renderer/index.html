@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; connect-src http://127.0.0.1:23890; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:;" />
+  <title>SANAD</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+    <symbol id="mk" viewBox="0 0 48 48">
+      <path d="M19 11 H12 V37 H19" fill="none" stroke="var(--mkb,currentColor)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M29 11 H36 V37 H29" fill="none" stroke="var(--mkb,currentColor)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M16.5 24.5 L22 30 L32 17.5" fill="none" stroke="var(--mkc,currentColor)" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+  </defs></svg>
+
+  <div class="app">
+    <div class="titlebar">
+      <div class="brand" style="--mkb:var(--text); --mkc:var(--accent)">
+        <svg class="mk" viewBox="0 0 48 48"><use href="#mk"/></svg>
+        <span class="w">SANAD</span><span class="ur">سند</span>
+      </div>
+      <label class="tb-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="globalSearch" type="search" placeholder="Search your library, documents, and citations" />
+      </label>
+      <div class="tb-right">
+        <span class="live" id="coreStatus"><b></b> <span id="coreStatusText">Connecting…</span></span>
+        <span style="font-family:var(--mono)" id="coreVersion"></span>
+      </div>
+    </div>
+
+    <div class="body">
+      <aside class="sidebar">
+        <button class="addbtn" data-nav="library">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg> Add source
+        </button>
+        <div class="navgroup">
+          <div class="lbl">Workspace</div>
+          <button class="nav active" data-screen="home">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/></svg> Home</button>
+          <button class="nav" data-screen="library">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h9a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M17 7h2v13H8"/></svg> Library <span class="count" id="navLibCount"></span></button>
+          <button class="nav" data-screen="documents">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/></svg> Documents <span class="count" id="navDocCount"></span></button>
+        </div>
+        <div class="navgroup">
+          <div class="lbl">Quality</div>
+          <button class="nav" data-screen="integrity">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s7-3.5 7-9V5l-7-2-7 2v7c0 5.5 7 9 7 9z"/><path d="M9 12l2 2 4-4"/></svg> Integrity check <span class="badge" id="navFlagBadge"></span></button>
+        </div>
+        <div class="navgroup">
+          <div class="lbl">Formatting</div>
+          <button class="nav" data-screen="style">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h10M4 18h13"/><circle cx="18" cy="12" r="2"/><circle cx="9" cy="18" r="2"/></svg> Style profiles <span class="count" id="navStyleCount"></span></button>
+        </div>
+        <div class="side-spacer"></div>
+        <div class="corecard" id="coreCard">
+          <div class="t"><span class="g"></span> SANAD Core</div>
+          <div class="m">127.0.0.1:23890</div>
+          <div class="v" id="coreCardState">starting…</div>
+        </div>
+      </aside>
+
+      <main class="work">
+        <!-- HOME -->
+        <section class="screen home" id="home">
+          <h3>Welcome to SANAD</h3>
+          <p class="sub">Your citation library and integrity checks — running entirely on this machine.</p>
+          <div class="metrics">
+            <div class="metric"><div class="l">Sources</div><div class="n" id="mSources">—</div><div class="d">in your library</div></div>
+            <div class="metric"><div class="l">Documents</div><div class="n" id="mDocs">0</div><div class="d">tracked</div></div>
+            <div class="metric"><div class="l">Open flags</div><div class="n" id="mFlags">0</div><div class="d">to review</div></div>
+            <div class="metric"><div class="l">Style profiles</div><div class="n" id="mStyles">—</div><div class="d">available</div></div>
+          </div>
+          <div class="panel">
+            <div class="ph">Getting started</div>
+            <div style="padding:14px 15px; font-size:14px; color:var(--muted); line-height:1.7">
+              1. Go to <b>Library</b> and import your references (RIS or BibTeX).<br/>
+              2. Build a <b>Style profile</b> for your university's format.<br/>
+              3. From Word or LibreOffice, insert citations and run the <b>Integrity check</b>.
+            </div>
+          </div>
+        </section>
+
+        <!-- LIBRARY -->
+        <section class="screen" id="library" hidden>
+          <div class="toolbar">
+            <h2>Library</h2><span class="pill" id="libCount">0 sources</span>
+            <div class="grow"></div>
+            <button class="btn" id="importSampleBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v10M8 11l4 4 4-4M5 19h14"/></svg> Import sample set</button>
+          </div>
+          <div class="split">
+            <div class="listwrap" id="libListWrap"></div>
+            <div class="detail" id="libDetail" style="display:none"></div>
+          </div>
+        </section>
+
+        <!-- INTEGRITY -->
+        <section class="screen" id="integrity" hidden>
+          <div class="toolbar"><h2>Integrity check</h2><div class="grow"></div></div>
+          <div class="empty">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="1.4"><path d="M12 21s7-3.5 7-9V5l-7-2-7 2v7c0 5.5 7 9 7 9z"/><path d="M9 12l2 2 4-4"/></svg>
+            <h3>No document to check yet</h3>
+            <p>Integrity runs per document. Insert citations from Word or LibreOffice, then run a check here — SANAD verifies each source is real, correctly dated, and cited in the right context.</p>
+          </div>
+        </section>
+
+        <!-- DOCUMENTS -->
+        <section class="screen" id="documents" hidden>
+          <div class="toolbar"><h2>Documents</h2><div class="grow"></div></div>
+          <div class="empty">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="1.4"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/></svg>
+            <h3>No documents linked</h3>
+            <p>Open a document in Word or LibreOffice with the SANAD add-in to track its citations and bibliography here.</p>
+          </div>
+        </section>
+
+        <!-- STYLE -->
+        <section class="screen" id="style" hidden>
+          <div class="toolbar"><h2>Style profiles</h2><span class="pill" id="styleCount"></span><div class="grow"></div>
+            <button class="btn primary" id="newProfileBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> New profile</button></div>
+          <div class="stylewrap">
+            <div class="profcol" id="profList"></div>
+            <div class="profbody" id="profBody"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>

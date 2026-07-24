@@ -96,6 +96,19 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
     app.state.db_path = str(db_path)
     app.state.events = EventHub()
 
+    # The desktop shell's renderer is a file:// page (Origin: null) that calls
+    # this Core cross-origin. The Core binds only to 127.0.0.1, so it is never
+    # network-reachable; CORS is scoped to the loopback + file:// origins the
+    # local app actually uses, not opened to arbitrary websites.
+    from fastapi.middleware.cors import CORSMiddleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["null", "http://localhost:23890", "http://127.0.0.1:23890"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     def get_conn():
         conn = db.connect(app.state.db_path)
         try:
