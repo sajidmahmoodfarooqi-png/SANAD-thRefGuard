@@ -54,12 +54,17 @@ _GENERIC_REVIEW_RE = re.compile(r"\breviews?\b", re.I)
 # R8 (Tier-B): cosine at/below which a citing sentence is treated as weakly
 # related to the source it cites. Backend-specific because lexical-overlap cosine
 # and true semantic cosine live on different scales; keyed by the provider family
-# (embedding.*.name before any ':'). These are conservative starting points, not
-# calibrated against a labelled set yet -- R8 is a confirm-only *warning* for
-# exactly that reason, and the thresholds are the obvious first thing to tune once
-# real labelled misattributions exist (MVP_SPEC.md §4).
-R8_THRESHOLDS = {"sentence-transformers": 0.35, "lexical-hash": 0.12}
-R8_DEFAULT_THRESHOLD = 0.12
+# (embedding.*.name before any ':').
+#   lexical-hash: calibrated (eval/r8_calibration.py) against a labelled set of
+#     on-topic vs off-topic pairs -- on-topic similarities clustered 0.12-0.59,
+#     off-topic near 0 (max ~0.13). 0.11 gives zero false alarms with the widest
+#     safe margin below the on-topic floor; erring low is deliberate, since a
+#     false alarm on a correctly-cited source is the costlier error for a
+#     confirm-only check.
+#   sentence-transformers: a conservative default, not yet calibrated (needs the
+#     real semantic backend installed; see MVP_SPEC.md §4).
+R8_THRESHOLDS = {"sentence-transformers": 0.35, "lexical-hash": 0.11}
+R8_DEFAULT_THRESHOLD = 0.11
 R8_SUGGESTION_TOPK = 3
 
 _YEAR_RE = re.compile(r"\b(1[5-9]\d{2}|20\d{2})[a-z]?\b")
