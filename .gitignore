@@ -1,0 +1,20 @@
+# ── Local-only: personal thesis data + legacy processing scripts ───────────
+# Kept on disk, never part of the SANAD software or its distribution.
+_phd_local/
+Existing Papers/
+Downloaded PDFs of Research Papers/
+
+# ── Local per-install config that may hold secrets (never committed) ────────
+sanad_core/config/*.json
+!sanad_core/config/*.example.json
+
+# ── Caches / logs / generated run artifacts ────────────────────────────────
+*.log
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ── OS / editor junk ───────────────────────────────────────────────────────
+~$*
+Thumbs.db
+.DS_Store
