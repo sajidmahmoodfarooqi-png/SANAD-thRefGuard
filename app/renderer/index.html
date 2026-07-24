@@ -34,7 +34,7 @@
 
     <div class="body">
       <aside class="sidebar">
-        <button class="addbtn" data-nav="library">
+        <button class="addbtn" data-action="import">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg> Add source
         </button>
         <div class="navgroup">
@@ -55,6 +55,8 @@
           <div class="lbl">Formatting</div>
           <button class="nav" data-screen="style">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h10M4 18h13"/><circle cx="18" cy="12" r="2"/><circle cx="9" cy="18" r="2"/></svg> Style profiles <span class="count" id="navStyleCount"></span></button>
+          <button class="nav" data-screen="settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.5 2h-4l-.4 2.6a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1z"/></svg> Settings</button>
         </div>
         <div class="side-spacer"></div>
         <div class="corecard" id="coreCard">
@@ -90,7 +92,7 @@
           <div class="toolbar">
             <h2>Library</h2><span class="pill" id="libCount">0 sources</span>
             <div class="grow"></div>
-            <button class="btn" id="importSampleBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v10M8 11l4 4 4-4M5 19h14"/></svg> Import sample set</button>
+            <button class="btn primary" data-action="import"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v10M8 11l4 4 4-4M5 19h14"/></svg> Import references</button>
           </div>
           <div class="split">
             <div class="listwrap" id="libListWrap"></div>
@@ -100,11 +102,15 @@
 
         <!-- INTEGRITY -->
         <section class="screen" id="integrity" hidden>
-          <div class="toolbar"><h2>Integrity check</h2><div class="grow"></div></div>
-          <div class="empty">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="1.4"><path d="M12 21s7-3.5 7-9V5l-7-2-7 2v7c0 5.5 7 9 7 9z"/><path d="M9 12l2 2 4-4"/></svg>
-            <h3>No document to check yet</h3>
-            <p>Integrity runs per document. Insert citations from Word or LibreOffice, then run a check here — SANAD verifies each source is real, correctly dated, and cited in the right context.</p>
+          <div class="toolbar"><h2>Integrity check</h2><div class="grow"></div>
+            <button class="btn primary" id="demoScanBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg> Run a demo check</button>
+          </div>
+          <div class="intg" id="intgBody">
+            <div class="empty">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="1.4"><path d="M12 21s7-3.5 7-9V5l-7-2-7 2v7c0 5.5 7 9 7 9z"/><path d="M9 12l2 2 4-4"/></svg>
+              <h3>Integrity runs per document</h3>
+              <p>In real use you insert citations from Word or LibreOffice, then check them here. To see exactly what SANAD catches — a wrong year, a review-venue mix-up, a source cited out of context — run a demo check on a small sample document.</p>
+            </div>
           </div>
         </section>
 
@@ -127,10 +133,34 @@
             <div class="profbody" id="profBody"></div>
           </div>
         </section>
+
+        <!-- SETTINGS / ABOUT -->
+        <section class="screen settings" id="settings" hidden>
+          <h3>Settings</h3>
+          <div class="setcard">
+            <div class="about">
+              <svg width="88" height="88" viewBox="0 0 48 48" style="--mkb:var(--seal); --mkc:var(--accent)"><use href="#mk"/></svg>
+              <div>
+                <div class="at">SANAD <span style="font-family:var(--urdu); color:var(--seal)">سند</span> — the RefGuard</div>
+                <div class="ad">A local-first citation companion: context-integrity checking, handbook-driven formatting, and a hard guarantee it never edits your prose.<br/>Version <span id="aboutVer">—</span> · AGPL-3.0</div>
+              </div>
+            </div>
+          </div>
+          <div class="setcard">
+            <div class="setrow2"><span>SANAD Core</span><span class="v" id="setCoreState">—</span></div>
+            <div class="setrow2"><span>Address</span><span class="v">127.0.0.1:23890</span></div>
+            <div class="setrow2"><span>Data</span><span class="v">stored on this machine — no cloud</span></div>
+          </div>
+          <div class="setcard">
+            <div class="setrow2"><span>Appearance</span><span class="v">follows your system light / dark theme</span></div>
+            <div class="setrow2"><span>Languages</span><span class="v">English · اردو / العربية (right-to-left)</span></div>
+          </div>
+        </section>
       </main>
     </div>
   </div>
 
+  <div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
   <div class="toast" id="toast"></div>
   <script src="app.js"></script>
 </body>
