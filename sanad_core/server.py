@@ -96,14 +96,15 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
     app.state.db_path = str(db_path)
     app.state.events = EventHub()
 
-    # The desktop shell's renderer is a file:// page (Origin: null) that calls
-    # this Core cross-origin. The Core binds only to 127.0.0.1, so it is never
-    # network-reachable; CORS is scoped to the loopback + file:// origins the
-    # local app actually uses, not opened to arbitrary websites.
+    # Local clients call this Core cross-origin: the desktop shell's renderer is a
+    # file:// page (Origin: null), and the Word/LibreOffice add-in is served from
+    # some https://localhost:<port>. The Core binds only to 127.0.0.1, so it is
+    # never network-reachable; CORS is scoped to loopback + file:// origins, never
+    # opened to arbitrary websites.
     from fastapi.middleware.cors import CORSMiddleware
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["null", "http://localhost:23890", "http://127.0.0.1:23890"],
+        allow_origin_regex=r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|null|file://)$",
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
