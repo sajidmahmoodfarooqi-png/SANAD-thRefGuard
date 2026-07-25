@@ -256,4 +256,9 @@ Tracking the audit's findings as they are closed.
   `:focus-visible` ring was added (verified headless with Playwright). (d)
   **Continuous integration** — `.github/workflows/ci.yml` runs the test suite on
   a Linux/Windows/macOS × Python 3.12/3.13 matrix and freezes + smoke-tests the
-  Core binary on each OS.
+  Core binary on each OS. (e) **R8 embedding cache** — a persistent per-text
+  vector cache (`embedding.CachingEmbedding`), built once per Core process and
+  reused across scans, so re-scans only embed genuinely new sentences/sources
+  rather than re-embedding the whole library pool every time (the dominant cost
+  under the real semantic model). Bounded + FIFO-evicted; returns byte-identical
+  vectors so determinism is preserved.

@@ -24,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import math
 import re
+from collections import OrderedDict
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 # function words carry no topic; dropping them keeps the lexical proxy focused on
@@ -91,13 +92,50 @@ class SentenceTransformerEmbedding:  # pragma: no cover - optional heavy depende
         return [list(map(float, v)) for v in vecs]
 
 
-def get_embedding_provider(prefer_semantic: bool = True):
+class CachingEmbedding:
+    """Wraps any provider with a persistent per-text vector cache.
+
+    A reference's title+abstract doesn't change between scans, yet R8 re-embeds
+    the whole library pool on every scan (see integrity.r8_context_misalignment).
+    For the lexical fallback that's cheap; for the real sentence-transformers
+    model it's the dominant cost. This memoizes each distinct text -> vector for
+    the life of the Core process, so re-scans only embed genuinely new text
+    (edited sentences, newly added sources). Bounded and FIFO-evicted so a huge
+    library can't grow the cache without limit. Returns byte-identical vectors,
+    so determinism (tests, re-scan flag suppression) is preserved."""
+
+    def __init__(self, inner, max_entries: int = 20_000):
+        self._inner = inner
+        self.name = inner.name
+        self._cache: "OrderedDict[str, list[float]]" = OrderedDict()
+        self._max = max_entries
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        missing = [t for t in dict.fromkeys(texts) if t not in self._cache]
+        if missing:
+            for t, v in zip(missing, self._inner.embed(missing)):
+                self._cache[t] = v
+                if len(self._cache) > self._max:
+                    self._cache.popitem(last=False)  # evict oldest
+        else:
+            # keep hot entries fresh-ish for eviction ordering only when we didn't
+            # just insert; cheap and keeps re-scanned refs from aging out first.
+            for t in dict.fromkeys(texts):
+                self._cache.move_to_end(t)
+        return [self._cache[t] for t in texts]
+
+
+def get_embedding_provider(prefer_semantic: bool = True, cache: bool = True):
     """Return the best available provider: the real semantic model if installed,
     otherwise the lexical fallback. Never raises — a missing torch is a
-    degradation, not a failure."""
+    degradation, not a failure. Wrapped in a persistent per-text cache by default
+    (harmless for the lexical proxy, a large win for the real model on re-scan)."""
+    provider = None
     if prefer_semantic:
         try:
-            return SentenceTransformerEmbedding()
+            provider = SentenceTransformerEmbedding()
         except Exception:
-            pass
-    return HashingEmbedding()
+            provider = None
+    if provider is None:
+        provider = HashingEmbedding()
+    return CachingEmbedding(provider) if cache else provider

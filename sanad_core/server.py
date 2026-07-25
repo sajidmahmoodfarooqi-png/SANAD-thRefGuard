@@ -132,6 +132,14 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
     app = FastAPI(title="SANAD the RefGuard — Core", version=__version__)
     app.state.db_path = str(db_path)
     app.state.events = EventHub()
+    app.state.embedder = None  # built once on first Tier-B scan, then reused
+
+    def _get_embedder():
+        # One provider per Core process, so its persistent per-text vector cache
+        # actually survives across scans (and the heavy model loads only once).
+        if app.state.embedder is None:
+            app.state.embedder = embedding.get_embedding_provider()
+        return app.state.embedder
 
     # --- security -------------------------------------------------------------
     # A researcher's work depends on this data being trustworthy, so the Core is
@@ -267,7 +275,7 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
             {"type": "scan-started", "document_id": document_id})
 
         # Tier-B runs only when the add-in sent citing sentences to check against.
-        embedder = embedding.get_embedding_provider() if body.contexts else None
+        embedder = _get_embedder() if body.contexts else None
         flags = integrity.scan(
             conn, document_id,
             present_control_ids=body.present_control_ids,
