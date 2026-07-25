@@ -244,6 +244,30 @@ def test_list_and_get_style_profiles(client):
     assert client.get("/v1/style-profiles/does-not-exist").status_code == 404
 
 
+def test_edit_style_profile_updates_in_place(client):
+    pid = client.post("/v1/style-profiles/build", json={"name": "Before Edit"}).json()["id"]
+    prof = client.get(f"/v1/style-profiles/{pid}").json()
+    prof["name"] = "After Edit"
+    r = client.put(f"/v1/style-profiles/{pid}", json=prof)
+    assert r.status_code == 200 and r.json()["id"] == pid
+    assert client.get(f"/v1/style-profiles/{pid}").json()["name"] == "After Edit"
+    # still exactly one profile -- an edit, not an insert
+    assert sum(1 for p in client.get("/v1/style-profiles").json()["profiles"]) == 1
+
+
+def test_edit_nonexistent_profile_is_404(client):
+    r = client.put("/v1/style-profiles/nope", json={"name": "x", "based_on_csl": "apa"})
+    assert r.status_code == 404
+
+
+def test_delete_style_profile(client):
+    pid = client.post("/v1/style-profiles/build", json={"name": "Delete Me"}).json()["id"]
+    r = client.delete(f"/v1/style-profiles/{pid}")
+    assert r.status_code == 200 and r.json()["deleted"] == pid
+    assert client.get(f"/v1/style-profiles/{pid}").status_code == 404
+    assert client.delete(f"/v1/style-profiles/{pid}").status_code == 404
+
+
 def test_bibliography_carries_office_paragraph_style(seeded):
     rid = _ref_id(seeded, "Fisher")
     seeded.post("/v1/citations", json={"document_id": "docP", "reference_ids": [rid]})

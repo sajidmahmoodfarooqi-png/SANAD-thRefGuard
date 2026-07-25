@@ -245,3 +245,15 @@ Tracking the audit's findings as they are closed.
   `tests/test_resolver.py` (merge logic with an injected fetch, no network) and
   API `resolve`-flag tests. This narrows the Zotero/Mendeley gap in §7's table
   from "❌" to "opt-in".
+
+- **Hygiene batch — FIXED.** (a) **Version strings unified** — Core and the
+  desktop app now both report `0.1.0` (was `0.1.0-dev` vs `0.1.0`). (b) **Style
+  Profile edit/delete** — added `PUT`/`DELETE /v1/style-profiles/{id}` plus
+  Rename and Delete controls in the app, so a profile is no longer create-only;
+  covered by module and API tests. (c) **Accessibility** — the modal is a real
+  `role="dialog"` with a Tab focus-trap, focus moves in on open and is restored
+  on close, toasts announce via `aria-live="polite"`, and a keyboard-only
+  `:focus-visible` ring was added (verified headless with Playwright). (d)
+  **Continuous integration** — `.github/workflows/ci.yml` runs the test suite on
+  a Linux/Windows/macOS × Python 3.12/3.13 matrix and freezes + smoke-tests the
+  Core binary on each OS.

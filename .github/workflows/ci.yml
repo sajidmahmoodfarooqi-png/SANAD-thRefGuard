@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }} · py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run test suite
+        run: python -m pytest -q
+
+  freeze:
+    name: Freeze Core binary (${{ matrix.os }})
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies + PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+      - name: Build standalone Core
+        run: python packaging/build_core.py
+      - name: Smoke-test the frozen binary
+        shell: bash
+        run: |
+          BIN=packaging/dist/sanad-core
+          [ -f "$BIN.exe" ] && BIN="$BIN.exe"
+          test -f "$BIN" || { echo "frozen binary missing"; exit 1; }
+          echo "built: $BIN ($(du -h "$BIN" | cut -f1))"
+      - name: Upload Core artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanad-core-${{ matrix.os }}
+          path: |
+            packaging/dist/sanad-core
+            packaging/dist/sanad-core.exe
+          if-no-files-found: ignore

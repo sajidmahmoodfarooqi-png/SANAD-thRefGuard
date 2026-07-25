@@ -218,6 +218,13 @@ def save_profile(conn: sqlite3.Connection, profile: dict) -> str:
     return pid
 
 
+def delete_profile(conn: sqlite3.Connection, profile_id: str) -> bool:
+    """Delete a style profile. Returns True if a row was removed."""
+    cur = conn.execute("DELETE FROM style_profile WHERE id = ?", (profile_id,))
+    conn.commit()
+    return cur.rowcount > 0
+
+
 def get_profile(conn: sqlite3.Connection, profile_id: str) -> dict | None:
     row = conn.execute("SELECT * FROM style_profile WHERE id = ?", (profile_id,)).fetchone()
     if not row:

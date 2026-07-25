@@ -170,8 +170,47 @@ async function showProfile(id) {
       ${ov.et_al_min != null ? row("“et al.” from", ov.et_al_min + " authors") : ""}
       ${ov.ampersand_in_text != null ? row("Ampersand in text", ov.ampersand_in_text ? "&" : "and") : ""}
       ${ps.bibliography_hanging_indent_cm != null ? row("Hanging indent", ps.bibliography_hanging_indent_cm + " cm") : ""}
-      ${ps.font_family ? row("Reference font", ps.font_family + (ps.font_size_pt ? " " + ps.font_size_pt : "")) : ""}`;
+      ${ps.font_family ? row("Reference font", ps.font_family + (ps.font_size_pt ? " " + ps.font_size_pt : "")) : ""}
+      <div style="display:flex;gap:8px;margin-top:20px">
+        <button class="btn" id="profRename">Rename…</button>
+        <button class="btn danger" id="profDelete">Delete</button>
+      </div>`;
+    $("profRename").addEventListener("click", () => renameProfile(p));
+    $("profDelete").addEventListener("click", () => deleteProfile(p));
   } catch (e) { $("profBody").innerHTML = `<p style="color:var(--muted)">Couldn't load profile: ${esc(e.message)}</p>`; }
+}
+
+function renameProfile(p) {
+  openModal(`
+    <div class="modal-h"><h3>Rename style profile</h3><button class="modal-x" data-close>&times;</button></div>
+    <div class="modal-b">
+      <div class="field-row"><label for="rnName">Profile name</label>
+        <input class="inp" id="rnName" value="${esc(p.name)}"/></div>
+    </div>
+    <div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn primary" id="rnGo">Save</button></div>`);
+  const input = modalEl.querySelector("#rnName");
+  input.focus(); input.select();
+  modalEl.querySelector("#rnGo").addEventListener("click", async () => {
+    const name = input.value.trim();
+    if (!name) { toast("Give the profile a name"); return; }
+    try {
+      await api(`/v1/style-profiles/${p.id}`, { method: "PUT", body: JSON.stringify({ ...p, name }) });
+      closeModal(); toast("Renamed"); loadStyles();
+    } catch (e) { toast("Rename failed: " + e.message); }
+  });
+}
+
+function deleteProfile(p) {
+  openModal(`
+    <div class="modal-h"><h3>Delete style profile?</h3><button class="modal-x" data-close>&times;</button></div>
+    <div class="modal-b"><p style="font-size:13.5px;line-height:1.6">Delete <b>${esc(p.name)}</b>? Documents already formatted with it keep their formatting; you just can't apply it to new documents. This can't be undone.</p></div>
+    <div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn danger" id="delGo">Delete</button></div>`);
+  modalEl.querySelector("#delGo").addEventListener("click", async () => {
+    try {
+      await api(`/v1/style-profiles/${p.id}`, { method: "DELETE" });
+      closeModal(); toast("Deleted"); loadStyles();
+    } catch (e) { toast("Delete failed: " + e.message); }
+  });
 }
 function row(label, value) {
   return `<div style="display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--hairline)"><span style="font-size:13px">${esc(label)}</span><span style="font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:600">${esc(value)}</span></div>`;
@@ -187,14 +226,36 @@ $("globalSearch").addEventListener("input", () => {
 
 // --- modal system ---------------------------------------------------------- //
 const overlay = $("overlay"), modalEl = $("modal");
+let modalReturnFocus = null;
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 function openModal(html) {
+  modalReturnFocus = document.activeElement;  // restore focus on close
   modalEl.innerHTML = html;
   overlay.classList.add("show");
   modalEl.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeModal));
+  // move focus into the dialog (first field, else first control)
+  const first = modalEl.querySelector("input,select,textarea") || modalEl.querySelector(FOCUSABLE);
+  if (first) first.focus();
 }
-function closeModal() { overlay.classList.remove("show"); modalEl.innerHTML = ""; }
+function closeModal() {
+  overlay.classList.remove("show");
+  modalEl.innerHTML = "";
+  if (modalReturnFocus && modalReturnFocus.focus) modalReturnFocus.focus();
+  modalReturnFocus = null;
+}
+function modalOpen() { return overlay.classList.contains("show"); }
 overlay.addEventListener("click", (e) => { if (e.target === overlay) closeModal(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+document.addEventListener("keydown", (e) => {
+  if (!modalOpen()) return;
+  if (e.key === "Escape") { closeModal(); return; }
+  if (e.key !== "Tab") return;
+  // trap Tab within the dialog
+  const items = [...modalEl.querySelectorAll(FOCUSABLE)].filter((el) => el.offsetParent !== null);
+  if (items.length === 0) return;
+  const first = items[0], last = items[items.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
 
 // --- import dialog --------------------------------------------------------- //
 const FMT_BY_EXT = { csv: "csv", xlsx: "xlsx", xls: "xlsx", docx: "docx", ris: "ris", bib: "bibtex", bibtex: "bibtex", txt: "typed" };

@@ -329,6 +329,23 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
             raise HTTPException(404, f"no style profile {profile_id!r}")
         return sp.to_sanadstyle_json(prof)
 
+    @app.put("/v1/style-profiles/{profile_id}")
+    def style_profile_update(profile_id: str, profile: dict, conn=Depends(get_conn)):
+        if sp.get_profile(conn, profile_id) is None:
+            raise HTTPException(404, f"no style profile {profile_id!r}")
+        profile["id"] = profile_id  # the path is authoritative
+        errors = sp.validate_profile(profile)
+        if errors:
+            raise HTTPException(422, {"errors": errors})
+        sp.save_profile(conn, profile)  # save_profile upserts on id
+        return {"id": profile_id}
+
+    @app.delete("/v1/style-profiles/{profile_id}")
+    def style_profile_delete(profile_id: str, conn=Depends(get_conn)):
+        if not sp.delete_profile(conn, profile_id):
+            raise HTTPException(404, f"no style profile {profile_id!r}")
+        return {"deleted": profile_id}
+
     @app.post("/v1/style-profiles/{profile_id}/apply")
     def style_profile_apply(profile_id: str, body: StyleProfileApply, conn=Depends(get_conn)):
         if sp.get_profile(conn, profile_id) is None:

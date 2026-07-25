@@ -38,6 +38,28 @@ def test_save_and_reload_profile_round_trips():
     assert reloaded["provenance"]["confirmed_by_user"] is True
 
 
+def test_delete_profile_removes_row():
+    conn = db.connect()
+    pid = style_profile.save_profile(conn, style_profile.default_profile("To Be Deleted"))
+    assert style_profile.get_profile(conn, pid) is not None
+    assert style_profile.delete_profile(conn, pid) is True
+    assert style_profile.get_profile(conn, pid) is None
+    # deleting again is a no-op, reported as False (not an error)
+    assert style_profile.delete_profile(conn, pid) is False
+
+
+def test_save_profile_with_existing_id_updates_in_place():
+    conn = db.connect()
+    profile = style_profile.default_profile("Original Name")
+    pid = style_profile.save_profile(conn, profile)
+    profile["id"] = pid
+    profile["name"] = "Renamed In Place"
+    pid2 = style_profile.save_profile(conn, profile)
+    assert pid2 == pid
+    assert style_profile.get_profile(conn, pid)["name"] == "Renamed In Place"
+    assert len(style_profile.list_profiles(conn)) == 1  # no duplicate row
+
+
 def test_invalid_profile_raises_on_save():
     conn = db.connect()
     profile = style_profile.default_profile()
