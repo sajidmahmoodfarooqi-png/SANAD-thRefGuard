@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from . import __version__, db, documents, embedding, importer, integrity, list_import
+from . import __version__, db, documents, embedding, importer, integrity, list_import, resolver
 from . import style_profile as sp
 
 DEFAULT_HOST = "127.0.0.1"
@@ -56,6 +56,7 @@ class ImportRequest(BaseModel):
     format: str            # ris | bibtex | typed | csv | xlsx | docx
     text: str = ""         # text formats (ris/bibtex/typed/csv)
     data_b64: str | None = None  # base64 file bytes for binary formats (xlsx/docx)
+    resolve: bool = False        # opt-in Crossref DOI lookup (off by default)
 
 
 class ScanRequest(BaseModel):
@@ -200,14 +201,16 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
         if len(req.text) > MAX_IMPORT_CHARS or (req.data_b64 or "") and len(req.data_b64) > MAX_IMPORT_CHARS:
             raise HTTPException(413, f"import too large (>{MAX_IMPORT_CHARS} chars)")
         fmt = req.format.lower()
+        # parse to (fields, authors) rows for every format, then optionally enrich
+        # from Crossref, then insert -- one path so `resolve` works uniformly.
         if fmt == "ris":
-            ids = importer.import_ris_text(conn, req.text)
+            rows = [importer.ris_record_to_fields(r) for r in importer.parse_ris(req.text)]
         elif fmt == "bibtex":
-            ids = importer.import_bibtex_text(conn, req.text)
+            rows = [importer.bibtex_entry_to_fields(e) for e in importer.parse_bibtex(req.text)]
         elif fmt == "typed":
-            ids = importer.import_typed_list_text(conn, req.text)
+            rows = [importer.parse_typed_reference(r) for r in importer.split_typed_list(req.text)]
         elif fmt == "csv":
-            ids = list_import.import_csv_text(conn, req.text)
+            rows = list_import.parse_csv(req.text)
         elif fmt in ("xlsx", "docx"):
             if not req.data_b64:
                 raise HTTPException(400, f"{fmt} import requires base64 file data in 'data_b64'")
@@ -215,13 +218,23 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
                 data = base64.b64decode(req.data_b64, validate=True)
             except Exception:
                 raise HTTPException(400, "data_b64 is not valid base64")
-            ids = (list_import.import_xlsx_bytes(conn, data) if fmt == "xlsx"
-                   else list_import.import_docx_bytes(conn, data))
+            rows = (list_import.parse_xlsx(data) if fmt == "xlsx"
+                    else list_import.parse_docx(data))
         else:
             raise HTTPException(400, f"unknown import format {req.format!r} "
                                      "(expected ris | bibtex | typed | csv | xlsx | docx)")
+
+        ids, resolved = [], 0
+        for fields, authors in rows:
+            if req.resolve:
+                new_fields, authors = resolver.enrich(fields, authors)
+                if new_fields.get("resolution_src") == "crossref":
+                    resolved += 1
+                fields = new_fields
+            ids.append(importer.insert_reference(conn, fields, authors))
+        conn.commit()
         count = conn.execute("SELECT COUNT(*) c FROM reference").fetchone()["c"]
-        return {"imported": len(ids), "library_size": count}
+        return {"imported": len(ids), "library_size": count, "resolved": resolved}
 
     # -- citations ---------------------------------------------------------- #
     @app.post("/v1/citations")

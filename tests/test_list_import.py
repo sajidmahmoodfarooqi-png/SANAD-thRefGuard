@@ -125,3 +125,32 @@ def test_api_import_docx_base64(client):
 def test_api_xlsx_without_data_is_400(client):
     r = client.post("/v1/library/import", json={"format": "xlsx", "text": ""})
     assert r.status_code == 400
+
+
+def test_api_resolve_flag_enriches_when_opted_in(client, monkeypatch):
+    """resolve=True routes each row through resolver.enrich (mocked -- no network)."""
+    from sanad_core import resolver
+
+    def fake_enrich(fields, authors, fetch=None):
+        if fields.get("doi"):
+            fields = {**fields, "title": "RESOLVED TITLE", "resolution_src": "crossref"}
+        return fields, authors
+
+    monkeypatch.setattr(resolver, "enrich", fake_enrich)
+    csv_with_doi = "Title,Year,DOI\nTyped title,2020,10.1000/abc\nNo doi here,2019,\n"
+    r = client.post("/v1/library/import",
+                    json={"format": "csv", "text": csv_with_doi, "resolve": True})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["imported"] == 2 and body["resolved"] == 1
+
+
+def test_api_resolve_defaults_off(client, monkeypatch):
+    from sanad_core import resolver
+
+    def boom(*a, **k):
+        raise AssertionError("enrich must not run when resolve is not set")
+
+    monkeypatch.setattr(resolver, "enrich", boom)
+    r = client.post("/v1/library/import", json={"format": "csv", "text": CSV})
+    assert r.status_code == 200 and r.json()["resolved"] == 0

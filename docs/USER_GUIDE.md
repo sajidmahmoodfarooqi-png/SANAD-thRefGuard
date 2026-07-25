@@ -73,15 +73,31 @@ references (next section).
 
 ## 4. Importing your references
 
-Click **Add source** (sidebar) or **Import references** (Library). In the dialog:
+Click **Add source** (sidebar) or **Import references** (Library). You have two
+ways in, and you can mix them:
 
-1. Pick a **format**: **RIS** or **BibTeX** (both export from any reference
-   manager), or **Typed list** (a plain numbered list of references).
-2. **Paste** your references into the box.
-3. Click **Import**.
+**A. From a file (no PDFs needed).** Click **"Choose a file…"** and pick a
+well-formatted list of your papers as **Excel (.xlsx)**, **CSV**, or **Word
+(.docx)** — or a **RIS**/**BibTeX** export from any reference manager. SANAD
+reads the list and builds your library from it; that library is what every
+citation, style, and integrity check works from afterwards. For a spreadsheet,
+give each paper a row and use column headers such as *Title, Authors, Year,
+Journal, Volume, Issue, Pages, DOI, Type* (SANAD recognises common variants and
+extra columns are ignored). A Word file may just be your reference list, one
+entry per paragraph.
 
-New to it? Click **"Load a small sample set"** to try the whole flow with a few
-example references.
+**B. By pasting.** Choose a **format** — **RIS**, **BibTeX**, **CSV**, or
+**Typed list** (a plain numbered reference list) — paste into the box, and click
+**Import pasted**. New to it? Click **"Load a small sample set"** to try the
+whole flow with a few example references.
+
+**Optional: online lookup (off by default).** Tick *"Look up complete details
+online for references that carry a DOI"* to have SANAD fill in and correct
+titles, authors, year and journal from **Crossref** for any entry that includes
+a DOI. This is the **only** time SANAD uses the internet, it is **per-import**
+and off unless you tick it, it only touches entries that already have a DOI (so
+it can never fetch the *wrong* paper from a title guess), and if you're offline
+or a lookup fails your reference is kept exactly as you supplied it.
 
 **What happens on import:** SANAD parses each reference, stores it locally, and
 de-duplicates safely — if you import the same reference twice (same DOI, or an
@@ -89,9 +105,10 @@ exact content match), it collapses to one entry. It never silently merges two
 *different* works that happen to share a title; instead it flags likely
 duplicates for you to review (rule **R6**, below).
 
-> SANAD does not fetch data from the internet, so it keeps exactly what you
-> import. If a reference is missing details, correct them in your reference
-> manager and re-import, or edit the source.
+> With online lookup left off, SANAD makes no network calls at all and keeps
+> exactly what you import. If a reference is missing details, either tick the
+> lookup box (if it has a DOI), correct it in your reference manager and
+> re-import, or edit the source.
 
 ## 5. Working with the library
 
@@ -174,6 +191,10 @@ remain as ordinary, readable text — they never turn into broken links.
 
 - **Everything is local.** Your library lives in a single file on your machine;
   the Core listens only on `127.0.0.1` and makes no outbound connections.
+- **One optional, explicit exception:** if you tick *online lookup* on an import,
+  SANAD sends **only the DOIs** of the entries you're importing to Crossref to
+  fetch their metadata. Nothing else leaves your machine, and it never happens
+  unless you tick the box for that import.
 - **No account, no cloud, no telemetry.**
 - **Your prose is never read or written** by the Core — it only ever handles
   citation fields and the sentence text you explicitly send for a context check.

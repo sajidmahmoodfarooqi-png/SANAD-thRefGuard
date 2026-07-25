@@ -230,3 +230,18 @@ Tracking the audit's findings as they are closed.
   leaks the library path. Covered by tests: token-required, wrong-token,
   foreign-host-rejected, WS-requires-token, import-413. This was the top
   must-fix blocker.
+
+- **§3 List-based import (Excel / CSV / Word) — ADDED.** Beyond RIS/BibTeX, the
+  Library now builds itself from a plain **Excel (.xlsx)**, **CSV**, or **Word
+  (.docx)** list of papers — no PDF ingestion required. Binary files are carried
+  base64-in-JSON (no new server dependency). Covered by `tests/test_list_import.py`.
+
+- **§3/§7.4 Metadata resolution (DOI→Crossref) — ADDED, opt-in.** An optional,
+  **off-by-default, per-import** online lookup enriches and corrects any entry
+  that carries a **DOI** against Crossref (`sanad_core/resolver.py`). It is
+  DOI-only (never a title guess, which could fetch the *wrong* paper), timeout-
+  guarded, and degrades to the user's own data on any failure — preserving the
+  local-first guarantee for everyone who leaves it off. Covered by
+  `tests/test_resolver.py` (merge logic with an injected fetch, no network) and
+  API `resolve`-flag tests. This narrows the Zotero/Mendeley gap in §7's table
+  from "❌" to "opt-in".

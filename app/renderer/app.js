@@ -211,21 +211,27 @@ async function doImport(body) {
   try {
     const r = await api("/v1/library/import", { method: "POST", body: JSON.stringify(body) });
     closeModal();
-    toast(`Imported ${r.imported} — library holds ${r.library_size}`);
+    const extra = r.resolved ? `, ${r.resolved} enriched online` : "";
+    toast(`Imported ${r.imported}${extra} — library holds ${r.library_size}`);
     go("library");
   } catch (e) { toast("Import failed: " + e.message); }
+}
+
+function wantsResolve() {
+  return !!(modalEl && modalEl.querySelector("#impResolve")?.checked);
 }
 
 function importFile(file) {
   const ext = (file.name.split(".").pop() || "").toLowerCase();
   const format = FMT_BY_EXT[ext];
   if (!format) { toast("Unsupported file type — use CSV, Excel, Word, RIS, or BibTeX"); return; }
+  const resolve = wantsResolve();
   const reader = new FileReader();
   if (format === "xlsx" || format === "docx") {
-    reader.onload = () => doImport({ format, data_b64: abToB64(reader.result) });
+    reader.onload = () => doImport({ format, resolve, data_b64: abToB64(reader.result) });
     reader.readAsArrayBuffer(file);
   } else {
-    reader.onload = () => doImport({ format, text: reader.result });
+    reader.onload = () => doImport({ format, resolve, text: reader.result });
     reader.readAsText(file);
   }
 }
@@ -245,6 +251,10 @@ function openImport() {
         <textarea class="ta" id="impText" placeholder="Paste RIS, BibTeX, a CSV table, or a plain numbered reference list."></textarea>
         <span class="hint">New to this? <a href="#" id="impSample">Load a small sample set</a>.</span>
       </div>
+      <div class="field-row" style="border-top:1px solid var(--hairline); padding-top:16px">
+        <label class="check"><input type="checkbox" id="impResolve"/> Look up complete details online for references that carry a DOI</label>
+        <span class="hint">Off by default. When on, SANAD queries Crossref (the only time it uses the internet) to fill in and correct titles, authors, year and journal for entries that include a DOI. Everything else stays fully local.</span>
+      </div>
     </div>
     <div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn primary" id="impGo">Import pasted</button></div>`);
   let fmt = "ris";
@@ -260,7 +270,7 @@ function openImport() {
   modalEl.querySelector("#impGo").addEventListener("click", () => {
     const text = modalEl.querySelector("#impText").value.trim();
     if (!text) { toast("Paste some references, or choose a file above"); return; }
-    doImport({ format: fmt, text });
+    doImport({ format: fmt, text, resolve: wantsResolve() });
   });
   modalEl.querySelector("#impFileBtn").addEventListener("click", () => modalEl.querySelector("#impFile").click());
   modalEl.querySelector("#impFile").addEventListener("change", (e) => {
