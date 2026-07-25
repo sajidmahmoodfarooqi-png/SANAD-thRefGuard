@@ -8,6 +8,9 @@ fastapi>=0.100              # local HTTP service (add-in <-> core protocol)
 uvicorn>=0.20               # ASGI server for FastAPI
 websockets>=11              # uvicorn's WebSocket impl, for the /v1/events channel
 pydantic>=2                 # request/response models
+openpyxl>=3.1               # Excel (.xlsx) reference-list import
+# CSV and Word (.docx) list import use only the standard library.
+# Opt-in Crossref DOI resolution uses only the standard library (urllib).
 
 # --- Optional: Tier-B semantic check (R8) real backend ---
 # NOT installed by default — the engine degrades to a deterministic lexical
@@ -20,10 +23,3 @@ pydantic>=2                 # request/response models
 # --- Tests ---
 pytest>=7
 httpx>=0.24                 # required by fastapi.testclient.TestClient
-
-# --- Legacy thesis-tooling scripts (not part of sanad_core; used by the
-#     resolve_bibliography / download_papers / make_chN_apa helpers) ---
-requests>=2.28
-openpyxl>=3.1
-python-docx>=1.0
-pymupdf>=1.23

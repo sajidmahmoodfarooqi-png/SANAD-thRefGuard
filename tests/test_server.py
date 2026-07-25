@@ -112,7 +112,7 @@ def test_search_by_author_surname(seeded):
 
 
 def test_import_unknown_format_is_400(client):
-    r = client.post("/v1/library/import", json={"format": "csv", "text": "x"})
+    r = client.post("/v1/library/import", json={"format": "yaml", "text": "x"})
     assert r.status_code == 400
 
 

@@ -197,19 +197,56 @@ overlay.addEventListener("click", (e) => { if (e.target === overlay) closeModal(
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
 
 // --- import dialog --------------------------------------------------------- //
+const FMT_BY_EXT = { csv: "csv", xlsx: "xlsx", xls: "xlsx", docx: "docx", ris: "ris", bib: "bibtex", bibtex: "bibtex", txt: "typed" };
+
+function abToB64(ab) {
+  const bytes = new Uint8Array(ab);
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  return btoa(bin);
+}
+
+async function doImport(body) {
+  try {
+    const r = await api("/v1/library/import", { method: "POST", body: JSON.stringify(body) });
+    closeModal();
+    toast(`Imported ${r.imported} — library holds ${r.library_size}`);
+    go("library");
+  } catch (e) { toast("Import failed: " + e.message); }
+}
+
+function importFile(file) {
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  const format = FMT_BY_EXT[ext];
+  if (!format) { toast("Unsupported file type — use CSV, Excel, Word, RIS, or BibTeX"); return; }
+  const reader = new FileReader();
+  if (format === "xlsx" || format === "docx") {
+    reader.onload = () => doImport({ format, data_b64: abToB64(reader.result) });
+    reader.readAsArrayBuffer(file);
+  } else {
+    reader.onload = () => doImport({ format, text: reader.result });
+    reader.readAsText(file);
+  }
+}
+
 function openImport() {
   openModal(`
     <div class="modal-h"><h3>Import references</h3><button class="modal-x" data-close>&times;</button></div>
     <div class="modal-b">
-      <div class="field-row"><label>Format</label>
-        <div class="seg2" id="impFmt"><button data-fmt="ris" class="on">RIS</button><button data-fmt="bibtex">BibTeX</button><button data-fmt="typed">Typed list</button></div>
+      <div class="field-row"><label>Import a list from a file</label>
+        <button class="btn" id="impFileBtn">Choose a file…</button>
+        <input type="file" id="impFile" accept=".csv,.xlsx,.xls,.docx,.ris,.bib,.bibtex,.txt" style="display:none"/>
+        <span class="hint">A well-formatted <b>Excel</b>, <b>CSV</b> or <b>Word</b> list of papers — or a <b>RIS</b>/<b>BibTeX</b> export. No PDFs needed.</span>
       </div>
-      <div class="field-row"><label>Paste your references</label>
-        <textarea class="ta" id="impText" placeholder="Paste RIS or BibTeX exported from your reference manager, or a plain numbered reference list."></textarea>
-        <span class="hint">New to this? <a href="#" id="impSample">Load a small sample set</a> to try it out.</span>
+      <div class="field-row" style="border-top:1px solid var(--hairline); padding-top:16px">
+        <label>…or paste references</label>
+        <div class="seg2" id="impFmt"><button data-fmt="ris" class="on">RIS</button><button data-fmt="bibtex">BibTeX</button><button data-fmt="csv">CSV</button><button data-fmt="typed">Typed list</button></div>
+        <textarea class="ta" id="impText" placeholder="Paste RIS, BibTeX, a CSV table, or a plain numbered reference list."></textarea>
+        <span class="hint">New to this? <a href="#" id="impSample">Load a small sample set</a>.</span>
       </div>
     </div>
-    <div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn primary" id="impGo">Import</button></div>`);
+    <div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn primary" id="impGo">Import pasted</button></div>`);
   let fmt = "ris";
   modalEl.querySelectorAll("#impFmt button").forEach((b) => b.addEventListener("click", () => {
     modalEl.querySelectorAll("#impFmt button").forEach((x) => x.classList.remove("on")); b.classList.add("on"); fmt = b.dataset.fmt;
@@ -220,13 +257,15 @@ function openImport() {
     fmt = "ris";
     modalEl.querySelector("#impText").value = NEUTRAL_RIS;
   });
-  modalEl.querySelector("#impGo").addEventListener("click", async () => {
+  modalEl.querySelector("#impGo").addEventListener("click", () => {
     const text = modalEl.querySelector("#impText").value.trim();
-    if (!text) { toast("Paste some references first"); return; }
-    try {
-      const r = await api("/v1/library/import", { method: "POST", body: JSON.stringify({ format: fmt, text }) });
-      closeModal(); toast(`Imported ${r.imported} — library holds ${r.library_size}`); go("library");
-    } catch (e) { toast("Import failed: " + e.message); }
+    if (!text) { toast("Paste some references, or choose a file above"); return; }
+    doImport({ format: fmt, text });
+  });
+  modalEl.querySelector("#impFileBtn").addEventListener("click", () => modalEl.querySelector("#impFile").click());
+  modalEl.querySelector("#impFile").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) importFile(file);
   });
 }
 document.querySelectorAll("[data-action=import]").forEach((b) => b.addEventListener("click", openImport));

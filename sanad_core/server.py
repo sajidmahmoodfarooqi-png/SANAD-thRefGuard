@@ -13,6 +13,7 @@ results:
 """
 from __future__ import annotations
 
+import base64
 import os
 import secrets
 import stat
@@ -23,7 +24,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from . import __version__, db, documents, embedding, importer, integrity
+from . import __version__, db, documents, embedding, importer, integrity, list_import
 from . import style_profile as sp
 
 DEFAULT_HOST = "127.0.0.1"
@@ -52,8 +53,9 @@ class StyleProfileApply(BaseModel):
 
 
 class ImportRequest(BaseModel):
-    format: str  # ris | bibtex | typed
-    text: str
+    format: str            # ris | bibtex | typed | csv | xlsx | docx
+    text: str = ""         # text formats (ris/bibtex/typed/csv)
+    data_b64: str | None = None  # base64 file bytes for binary formats (xlsx/docx)
 
 
 class ScanRequest(BaseModel):
@@ -195,7 +197,7 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
 
     @app.post("/v1/library/import")
     def library_import(req: ImportRequest, conn=Depends(get_conn)):
-        if len(req.text) > MAX_IMPORT_CHARS:
+        if len(req.text) > MAX_IMPORT_CHARS or (req.data_b64 or "") and len(req.data_b64) > MAX_IMPORT_CHARS:
             raise HTTPException(413, f"import too large (>{MAX_IMPORT_CHARS} chars)")
         fmt = req.format.lower()
         if fmt == "ris":
@@ -204,9 +206,20 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
             ids = importer.import_bibtex_text(conn, req.text)
         elif fmt == "typed":
             ids = importer.import_typed_list_text(conn, req.text)
+        elif fmt == "csv":
+            ids = list_import.import_csv_text(conn, req.text)
+        elif fmt in ("xlsx", "docx"):
+            if not req.data_b64:
+                raise HTTPException(400, f"{fmt} import requires base64 file data in 'data_b64'")
+            try:
+                data = base64.b64decode(req.data_b64, validate=True)
+            except Exception:
+                raise HTTPException(400, "data_b64 is not valid base64")
+            ids = (list_import.import_xlsx_bytes(conn, data) if fmt == "xlsx"
+                   else list_import.import_docx_bytes(conn, data))
         else:
             raise HTTPException(400, f"unknown import format {req.format!r} "
-                                     "(expected ris | bibtex | typed)")
+                                     "(expected ris | bibtex | typed | csv | xlsx | docx)")
         count = conn.execute("SELECT COUNT(*) c FROM reference").fetchone()["c"]
         return {"imported": len(ids), "library_size": count}
 

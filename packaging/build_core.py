@@ -30,6 +30,7 @@ def main() -> int:
         "--specpath", str(ROOT / "packaging"),
         "--collect-all", "citeproc",
         "--collect-all", "citeproc_styles",
+        "--collect-all", "openpyxl",  # lazily imported in list_import.parse_xlsx
         "--collect-submodules", "uvicorn",
         "--collect-submodules", "sanad_core",
         "--hidden-import", "websockets",
