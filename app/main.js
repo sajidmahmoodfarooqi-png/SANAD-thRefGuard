@@ -84,6 +84,10 @@ function createWindow(coreReady) {
     shell.openExternal(url);
     return { action: "deny" };
   });
+  // never let a dropped file (or stray link) navigate away from the app shell
+  win.webContents.on("will-navigate", (e, url) => {
+    if (url !== win.webContents.getURL()) e.preventDefault();
+  });
   const query = `?ready=${coreReady ? 1 : 0}`;
   win.loadFile(path.join(__dirname, "renderer", "index.html"), {
     search: query,

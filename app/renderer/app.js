@@ -363,12 +363,24 @@ function openImport() {
   const drop = modalEl.querySelector("#impDrop"), fileInput = modalEl.querySelector("#impFile");
   drop.addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", (e) => { const f = e.target.files[0]; if (f) importFile(f); });
-  // drag-and-drop a library file straight onto the drop zone
-  ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("drag"); }));
-  ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("drag"); }));
-  drop.addEventListener("drop", (e) => { const f = e.dataTransfer.files[0]; if (f) importFile(f); });
+  // drag-and-drop a library file straight onto the drop zone. Every dragover must
+  // preventDefault or the drop never fires; the global guard below stops a stray
+  // drop from navigating the whole window to the file.
+  ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); drop.classList.add("drag"); }));
+  drop.addEventListener("dragleave", (e) => { e.preventDefault(); drop.classList.remove("drag"); });
+  drop.addEventListener("drop", (e) => {
+    e.preventDefault(); e.stopPropagation(); drop.classList.remove("drag");
+    const dt = e.dataTransfer;
+    const f = (dt.files && dt.files[0]) || (dt.items && dt.items[0] && dt.items[0].getAsFile && dt.items[0].getAsFile());
+    if (f) importFile(f);
+    else toast("Couldn't read the dropped file — try the “Choose a file” button instead");
+  });
 }
 document.querySelectorAll("[data-action=import]").forEach((b) => b.addEventListener("click", openImport));
+// Global guard: in Electron a file dropped anywhere but a handled zone makes the
+// window navigate to that file (blanking the app). Swallow drops outside the zone.
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", (e) => e.preventDefault());
 
 // --- style profile builder ------------------------------------------------- //
 function openStyleBuilder() {
