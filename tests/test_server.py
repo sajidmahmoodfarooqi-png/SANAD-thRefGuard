@@ -237,6 +237,39 @@ def test_build_invalid_style_profile_is_422(client):
     assert r.status_code == 422
 
 
+def _ris_batch(n):
+    return "\n".join(
+        f"TY  - JOUR\nTI  - Paginated study number {i}\nAU  - Author, N{i}\n"
+        f"PY  - 20{i % 100:02d}\nDO  - 10.1000/pg.{i}\nER  - " for i in range(n))
+
+
+def test_library_lists_all_records_beyond_100(client):
+    # regression: the Library view used to cap at 100 via the typeahead endpoint,
+    # hiding every record past the first hundred. /v1/library must expose them all.
+    r = client.post("/v1/library/import", json={"format": "ris", "text": _ris_batch(250)})
+    assert r.json()["imported"] == 250
+
+    page1 = client.get("/v1/library?limit=200&offset=0").json()
+    assert page1["total"] == 250            # true total, not the page size
+    assert len(page1["results"]) == 200
+
+    page2 = client.get("/v1/library?limit=200&offset=200").json()
+    assert len(page2["results"]) == 50      # the remainder is reachable
+    # no overlap between pages
+    ids1 = {x["id"] for x in page1["results"]}
+    ids2 = {x["id"] for x in page2["results"]}
+    assert ids1.isdisjoint(ids2)
+    assert len(ids1 | ids2) == 250          # every record is reachable across pages
+
+
+def test_library_list_filters_by_query(client):
+    client.post("/v1/library/import", json={"format": "ris", "text": _ris_batch(120)})
+    all_ = client.get("/v1/library?limit=200").json()
+    assert all_["total"] == 120
+    one = client.get("/v1/library?q=number 42&limit=200").json()
+    assert one["total"] == 1 and one["results"][0]["title"].endswith("number 42")
+
+
 def test_list_and_get_style_profiles(client):
     pid = client.post("/v1/style-profiles/build", json={"name": "Only One"}).json()["id"]
     listing = client.get("/v1/style-profiles").json()["profiles"]

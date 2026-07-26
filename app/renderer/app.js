@@ -85,25 +85,35 @@ async function pollHealth() {
 }
 
 // --- library --------------------------------------------------------------- //
+const LIB_PAGE = 200;   // rows rendered per page — the whole library is reachable via paging
+let libOffset = 0;
+let libLastQuery = null;
+
 async function loadLibrary() {
   const wrap = $("libListWrap");
-  let results = [];
+  const q = $("globalSearch").value.trim();
+  if (q !== libLastQuery) { libOffset = 0; libLastQuery = q; }  // new search resets to page 1
+
+  let results = [], total = 0;
   try {
-    const q = $("globalSearch").value.trim();
-    results = (await api(`/v1/library/search?q=${encodeURIComponent(q)}&limit=100`)).results;
+    const data = await api(`/v1/library?q=${encodeURIComponent(q)}&limit=${LIB_PAGE}&offset=${libOffset}`);
+    results = data.results; total = data.total ?? results.length;
   } catch {
     wrap.innerHTML = `<div class="empty"><h3>Core not reachable</h3><p>The SANAD Core service isn't responding. It should start automatically with the app.</p></div>`;
     return;
   }
-  $("libCount").textContent = `${results.length} source${results.length === 1 ? "" : "s"}`;
-  $("navLibCount").textContent = results.length || "";
-  $("mSources").textContent = results.length;
 
-  if (results.length === 0) {
+  // header counts always reflect the TRUE total, not just the current page
+  const label = q ? `${total.toLocaleString()} match${total === 1 ? "" : "es"}` : `${total.toLocaleString()} source${total === 1 ? "" : "s"}`;
+  $("libCount").textContent = label;
+  $("navLibCount").textContent = total || "";
+  $("mSources").textContent = total;
+
+  if (total === 0) {
     wrap.innerHTML = `<div class="empty">
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="1.4"><path d="M5 4h9a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M17 7h2v13H8"/></svg>
-      <h3>Your library is empty</h3>
-      <p>Import references from RIS or BibTeX to get started — use <b>Add source</b> in the sidebar.</p></div>`;
+      <h3>${q ? "No matches" : "Your library is empty"}</h3>
+      <p>${q ? "No references match your search." : "Import your existing library file (<b>.ris</b>, <b>.bib</b>, .csv, .xlsx, .docx) — use <b>Add source</b> in the sidebar."}</p></div>`;
     $("libDetail").style.display = "none";
     return;
   }
@@ -113,12 +123,24 @@ async function loadLibrary() {
     <td class="au">${esc(r.authors || "")}</td>
     <td class="yr">${r.year ?? ""}</td>
     <td><span class="tag">${esc(itemLabel(r.item_type))}</span></td></tr>`).join("");
-  wrap.innerHTML = `<table class="lib"><thead><tr><th>Title</th><th>Authors</th><th>Year</th><th>Type</th></tr></thead><tbody>${rows}</tbody></table>`;
+
+  const from = total ? libOffset + 1 : 0, to = Math.min(libOffset + LIB_PAGE, total);
+  const pager = total > LIB_PAGE ? `
+    <div class="pager">
+      <button class="btn small" id="libPrev" ${libOffset === 0 ? "disabled" : ""}>← Previous</button>
+      <span class="pager-info">Showing ${from.toLocaleString()}–${to.toLocaleString()} of ${total.toLocaleString()}</span>
+      <button class="btn small" id="libNext" ${to >= total ? "disabled" : ""}>Next →</button>
+    </div>` : "";
+
+  wrap.innerHTML = `<table class="lib"><thead><tr><th>Title</th><th>Authors</th><th>Year</th><th>Type</th></tr></thead><tbody>${rows}</tbody></table>${pager}`;
   wrap.querySelectorAll("tbody tr").forEach((tr) => tr.addEventListener("click", () => {
     wrap.querySelectorAll("tr").forEach((x) => x.classList.remove("sel"));
     tr.classList.add("sel");
     showDetail(results[+tr.dataset.i]);
   }));
+  const prev = wrap.querySelector("#libPrev"), next = wrap.querySelector("#libNext");
+  if (prev) prev.addEventListener("click", () => { libOffset = Math.max(0, libOffset - LIB_PAGE); loadLibrary(); });
+  if (next) next.addEventListener("click", () => { libOffset += LIB_PAGE; loadLibrary(); });
   showDetail(results[0]);
   wrap.querySelector("tbody tr")?.classList.add("sel");
 }
@@ -274,6 +296,7 @@ async function doImport(body) {
     closeModal();
     const extra = r.resolved ? `, ${r.resolved} enriched online` : "";
     toast(`Imported ${r.imported}${extra} — library holds ${r.library_size}`);
+    libOffset = 0; libLastQuery = null;  // show page 1 with the new total
     go("library");
   } catch (e) { toast("Import failed: " + e.message); }
 }
@@ -299,15 +322,19 @@ function importFile(file) {
 
 function openImport() {
   openModal(`
-    <div class="modal-h"><h3>Import references</h3><button class="modal-x" data-close>&times;</button></div>
+    <div class="modal-h"><h3>Import your library</h3><button class="modal-x" data-close>&times;</button></div>
     <div class="modal-b">
-      <div class="field-row"><label>Import a list from a file</label>
-        <button class="btn" id="impFileBtn">Choose a file…</button>
+      <div class="field-row"><label>Import an existing library file</label>
+        <div class="import-drop" id="impDrop">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6"><path d="M12 16V4M8 8l4-4 4 4"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+          <div><b>Choose a file</b> or drag it here</div>
+          <div class="fmts"><span class="fmt">.ris</span><span class="fmt">.bib</span><span class="fmt">.bibtex</span><span class="fmt">.csv</span><span class="fmt">.xlsx</span><span class="fmt">.docx</span></div>
+          <span class="hint">Already have a library from Zotero, Mendeley, EndNote or a spreadsheet? Export it as <b>RIS</b> or <b>BibTeX</b> and drop it here — no need to retype anything, and no PDFs required.</span>
+        </div>
         <input type="file" id="impFile" accept=".csv,.xlsx,.xls,.docx,.ris,.bib,.bibtex,.txt" style="display:none"/>
-        <span class="hint">A well-formatted <b>Excel</b>, <b>CSV</b> or <b>Word</b> list of papers — or a <b>RIS</b>/<b>BibTeX</b> export. No PDFs needed.</span>
       </div>
       <div class="field-row" style="border-top:1px solid var(--hairline); padding-top:16px">
-        <label>…or paste references</label>
+        <label>…or paste references instead</label>
         <div class="seg2" id="impFmt"><button data-fmt="ris" class="on">RIS</button><button data-fmt="bibtex">BibTeX</button><button data-fmt="csv">CSV</button><button data-fmt="typed">Typed list</button></div>
         <textarea class="ta" id="impText" placeholder="Paste RIS, BibTeX, a CSV table, or a plain numbered reference list."></textarea>
         <span class="hint">New to this? <a href="#" id="impSample">Load a small sample set</a>.</span>
@@ -317,7 +344,7 @@ function openImport() {
         <span class="hint">Off by default. When on, SANAD queries Crossref (the only time it uses the internet) to fill in and correct titles, authors, year and journal for entries that include a DOI. Everything else stays fully local.</span>
       </div>
     </div>
-    <div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn primary" id="impGo">Import pasted</button></div>`);
+    <div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn primary" id="impGo">Import pasted text</button></div>`);
   let fmt = "ris";
   modalEl.querySelectorAll("#impFmt button").forEach((b) => b.addEventListener("click", () => {
     modalEl.querySelectorAll("#impFmt button").forEach((x) => x.classList.remove("on")); b.classList.add("on"); fmt = b.dataset.fmt;
@@ -333,11 +360,13 @@ function openImport() {
     if (!text) { toast("Paste some references, or choose a file above"); return; }
     doImport({ format: fmt, text, resolve: wantsResolve() });
   });
-  modalEl.querySelector("#impFileBtn").addEventListener("click", () => modalEl.querySelector("#impFile").click());
-  modalEl.querySelector("#impFile").addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (file) importFile(file);
-  });
+  const drop = modalEl.querySelector("#impDrop"), fileInput = modalEl.querySelector("#impFile");
+  drop.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", (e) => { const f = e.target.files[0]; if (f) importFile(f); });
+  // drag-and-drop a library file straight onto the drop zone
+  ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("drag"); }));
+  ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("drag"); }));
+  drop.addEventListener("drop", (e) => { const f = e.dataTransfer.files[0]; if (f) importFile(f); });
 }
 document.querySelectorAll("[data-action=import]").forEach((b) => b.addEventListener("click", openImport));
 

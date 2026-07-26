@@ -76,6 +76,58 @@ def set_document_profile(conn: sqlite3.Connection, document_id: str, profile_id:
 # library search (for the insert-citation UI)
 # --------------------------------------------------------------------------- #
 
+def _rows_to_refs(conn: sqlite3.Connection, rows) -> list[dict]:
+    out = []
+    for r in rows:
+        authors = conn.execute(
+            """SELECT a.family, a.given, a.literal FROM reference_author ra
+                 JOIN author a ON a.id = ra.author_id
+                WHERE ra.reference_id = ? ORDER BY ra.position""",
+            (r["id"],),
+        ).fetchall()
+        author_str = ", ".join(a["literal"] or a["family"] or "" for a in authors)
+        out.append({
+            "id": r["id"], "title": r["title"], "year": r["year"],
+            "doi": r["doi"], "item_type": r["item_type"], "authors": author_str,
+        })
+    return out
+
+
+def count_library(conn: sqlite3.Connection, q: str = "") -> int:
+    """Total references matching q (whole library when q is empty)."""
+    like = f"%{q.strip()}%"
+    row = conn.execute(
+        """SELECT COUNT(DISTINCT r.id) AS n
+             FROM reference r
+             LEFT JOIN reference_author ra ON ra.reference_id = r.id
+             LEFT JOIN author a ON a.id = ra.author_id
+            WHERE r.title LIKE ? OR a.family LIKE ? OR a.literal LIKE ?
+                  OR CAST(r.year AS TEXT) LIKE ?""",
+        (like, like, like, like),
+    ).fetchone()
+    return int(row["n"]) if row else 0
+
+
+def list_library(conn: sqlite3.Connection, q: str = "", limit: int = 200,
+                 offset: int = 0) -> list[dict]:
+    """Browse the whole library (or filtered by q), one page at a time. Unlike
+    search_library (typeahead, small fixed cap) this is the paginated backing for
+    the Library view, so a library of any size is fully reachable."""
+    like = f"%{q.strip()}%"
+    rows = conn.execute(
+        """SELECT DISTINCT r.id, r.title, r.year, r.doi, r.item_type
+             FROM reference r
+             LEFT JOIN reference_author ra ON ra.reference_id = r.id
+             LEFT JOIN author a ON a.id = ra.author_id
+            WHERE r.title LIKE ? OR a.family LIKE ? OR a.literal LIKE ?
+                  OR CAST(r.year AS TEXT) LIKE ?
+            ORDER BY r.year DESC, r.title
+            LIMIT ? OFFSET ?""",
+        (like, like, like, like, max(1, min(limit, 1000)), max(0, offset)),
+    ).fetchall()
+    return _rows_to_refs(conn, rows)
+
+
 def search_library(conn: sqlite3.Connection, q: str, limit: int = 20) -> list[dict]:
     like = f"%{q.strip()}%"
     rows = conn.execute(

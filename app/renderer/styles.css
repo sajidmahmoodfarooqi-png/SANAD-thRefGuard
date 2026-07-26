@@ -81,6 +81,18 @@ body { font-family:var(--sans); color:var(--text); background:var(--surface); -w
 .btn.danger { color:var(--danger, #c0392b); border-color:var(--danger, #c0392b); }
 .btn.danger:hover { background:var(--danger, #c0392b); color:#fff; }
 .btn.small { padding:5px 10px; font-size:12px; }
+/* library pagination */
+.pager { display:flex; align-items:center; justify-content:center; gap:14px; padding:14px 0 4px; }
+.pager-info { font-size:12.5px; color:var(--muted); font-variant-numeric:tabular-nums; }
+.btn[disabled] { opacity:.4; cursor:not-allowed; }
+/* prominent file-import drop zone */
+.import-drop { display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center;
+  border:2px dashed color-mix(in srgb,var(--accent) 45%,var(--hairline)); border-radius:12px;
+  padding:22px 18px; background:color-mix(in srgb,var(--accent) 6%,transparent); cursor:pointer; }
+.import-drop:hover, .import-drop.drag { background:color-mix(in srgb,var(--accent) 12%,transparent); border-color:var(--accent); }
+.import-drop .fmts { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-top:2px; }
+.import-drop .fmt { font-family:var(--mono); font-size:11px; padding:2px 8px; border-radius:999px;
+  background:var(--elev); border:1px solid var(--hairline); color:var(--muted); }
 /* keyboard-only focus ring (mouse clicks don't trigger :focus-visible) */
 :focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:6px; }
 .btn:focus-visible, .prof:focus-visible { outline-offset:2px; }

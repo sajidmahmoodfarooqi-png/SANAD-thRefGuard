@@ -204,6 +204,17 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
     def library_search(q: str = "", limit: int = 20, conn=Depends(get_conn)):
         return {"results": documents.search_library(conn, q, limit)}
 
+    @app.get("/v1/library")
+    def library_list(q: str = "", limit: int = 200, offset: int = 0,
+                     conn=Depends(get_conn)):
+        # The paginated Library view: the whole library is reachable regardless of
+        # size (search_library above is only the small typeahead helper).
+        return {
+            "results": documents.list_library(conn, q, limit, offset),
+            "total": documents.count_library(conn, q),
+            "limit": limit, "offset": offset,
+        }
+
     @app.post("/v1/library/import")
     def library_import(req: ImportRequest, conn=Depends(get_conn)):
         if len(req.text) > MAX_IMPORT_CHARS or (req.data_b64 or "") and len(req.data_b64) > MAX_IMPORT_CHARS:
