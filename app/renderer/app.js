@@ -143,7 +143,43 @@ async function loadLibrary() {
   if (next) next.addEventListener("click", () => { libOffset += LIB_PAGE; loadLibrary(); });
   showDetail(results[0]);
   wrap.querySelector("tbody tr")?.classList.add("sel");
+  refreshDedupeButton();
 }
+
+async function refreshDedupeButton() {
+  const btn = $("libDedupeBtn");
+  if (!btn) return;
+  try {
+    const d = await api("/v1/library/duplicates");
+    if (d.duplicate_count > 0) {
+      $("libDedupeLbl").textContent = `Remove ${d.duplicate_count} duplicate${d.duplicate_count === 1 ? "" : "s"}`;
+      btn.style.display = "";
+    } else {
+      btn.style.display = "none";
+    }
+  } catch { btn.style.display = "none"; }
+}
+
+function openDedupe() {
+  api("/v1/library/duplicates").then((d) => {
+    const n = d.duplicate_count;
+    if (!n) { toast("No duplicates found"); return; }
+    openModal(`
+      <div class="modal-h"><h3>Remove duplicates</h3><button class="modal-x" data-close>&times;</button></div>
+      <div class="modal-b"><p style="font-size:13.5px;line-height:1.6">Found <b>${n}</b> duplicate reference${n === 1 ? "" : "s"} across ${d.groups} group${d.groups === 1 ? "" : "s"} — copies of works you already have (matched by DOI, or by an exact title/author/year/venue match).</p>
+      <p style="font-size:13.5px;line-height:1.6">SANAD keeps one copy of each and removes the extras. Any citations already pointing at a removed copy are repointed to the one that's kept, so nothing breaks. This can't be undone.</p></div>
+      <div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn primary" id="dedupeGo">Remove ${n} duplicate${n === 1 ? "" : "s"}</button></div>`);
+    modalEl.querySelector("#dedupeGo").addEventListener("click", async () => {
+      try {
+        const r = await api("/v1/library/deduplicate", { method: "POST" });
+        closeModal();
+        toast(`Removed ${r.removed} duplicate${r.removed === 1 ? "" : "s"} — library holds ${r.library_size}`);
+        libOffset = 0; libLastQuery = null; loadLibrary();
+      } catch (e) { toast("Couldn't remove duplicates: " + e.message); }
+    });
+  }).catch((e) => toast("Couldn't check for duplicates: " + e.message));
+}
+$("libDedupeBtn")?.addEventListener("click", openDedupe);
 
 function showDetail(r) {
   const d = $("libDetail");
@@ -290,7 +326,10 @@ function abToB64(ab) {
   return btoa(bin);
 }
 
+let importInFlight = false;
 async function doImport(body) {
+  if (importInFlight) { toast("An import is already running — one moment…"); return; }  // block a rapid double-drop
+  importInFlight = true;
   try {
     const r = await api("/v1/library/import", { method: "POST", body: JSON.stringify(body) });
     closeModal();
@@ -299,6 +338,7 @@ async function doImport(body) {
     libOffset = 0; libLastQuery = null;  // show page 1 with the new total
     go("library");
   } catch (e) { toast("Import failed: " + e.message); }
+  finally { importInFlight = false; }
 }
 
 function wantsResolve() {

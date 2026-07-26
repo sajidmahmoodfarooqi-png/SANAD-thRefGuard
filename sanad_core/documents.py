@@ -93,6 +93,80 @@ def _rows_to_refs(conn: sqlite3.Connection, rows) -> list[dict]:
     return out
 
 
+def find_duplicate_groups(conn: sqlite3.Connection) -> list[dict]:
+    """Groups of references that are exact duplicates of one another -- same DOI
+    (case-insensitive) or, failing a DOI, the same full-content signature. Each
+    group lists the canonical keeper (earliest imported) plus the extra copies."""
+    rows = conn.execute(
+        """SELECT id, title, doi, content_sig, created_at
+             FROM reference ORDER BY created_at, id"""
+    ).fetchall()
+    groups: dict[str, list] = {}
+    for r in rows:
+        doi = (r["doi"] or "").strip().lower()
+        key = f"doi:{doi}" if doi else (f"sig:{r['content_sig']}" if r["content_sig"] else None)
+        if key is None:
+            continue  # nothing to dedupe on -- treat as unique
+        groups.setdefault(key, []).append(r)
+    out = []
+    for members in groups.values():
+        if len(members) > 1:
+            out.append({
+                "keep": members[0]["id"],
+                "title": members[0]["title"],
+                "remove": [m["id"] for m in members[1:]],
+            })
+    return out
+
+
+def deduplicate_library(conn: sqlite3.Connection) -> dict:
+    """Remove exact-duplicate references, keeping one canonical copy of each and
+    repointing any citations / source-map matches at the keeper first, so no
+    document is left referencing a deleted row. Returns what was done."""
+    dupes = find_duplicate_groups(conn)
+    remap: dict[str, str] = {}
+    for g in dupes:
+        for rid in g["remove"]:
+            remap[rid] = g["keep"]
+    if not remap:
+        return {"removed": 0, "groups": 0, "library_size": count_library(conn)}
+
+    # 1) repoint grouped citations (reference_ids is a JSON array)
+    for cid, raw in conn.execute("SELECT id, reference_ids FROM citation").fetchall():
+        try:
+            ids = json.loads(raw) if raw else []
+        except (json.JSONDecodeError, TypeError):
+            continue
+        new_ids, seen, changed = [], set(), False
+        for rid in ids:
+            mapped = remap.get(rid, rid)
+            if mapped != rid:
+                changed = True
+            if mapped not in seen:      # collapse if both original and keeper were cited
+                seen.add(mapped); new_ids.append(mapped)
+        if changed:
+            conn.execute("UPDATE citation SET reference_ids = ? WHERE id = ?",
+                         (json.dumps(new_ids), cid))
+
+    # 2) repoint local-PDF matches (table is optional -- guard on its presence)
+    has_local_pdf = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='local_pdf'").fetchone()
+    if has_local_pdf:
+        for removed, keep in remap.items():
+            conn.execute(
+                "UPDATE local_pdf SET matched_reference_id = ? WHERE matched_reference_id = ?",
+                (keep, removed))
+
+    # 3) delete the extra copies (author links first)
+    removed_ids = list(remap)
+    conn.executemany("DELETE FROM reference_author WHERE reference_id = ?",
+                     [(r,) for r in removed_ids])
+    conn.executemany("DELETE FROM reference WHERE id = ?", [(r,) for r in removed_ids])
+    conn.commit()
+    return {"removed": len(removed_ids), "groups": len(dupes),
+            "library_size": count_library(conn)}
+
+
 def count_library(conn: sqlite3.Connection, q: str = "") -> int:
     """Total references matching q (whole library when q is empty)."""
     like = f"%{q.strip()}%"

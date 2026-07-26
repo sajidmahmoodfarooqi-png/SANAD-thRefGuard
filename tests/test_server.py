@@ -262,6 +262,59 @@ def test_library_lists_all_records_beyond_100(client):
     assert len(ids1 | ids2) == 250          # every record is reachable across pages
 
 
+def _dup_reference(conn, rid, doi=None, sig="samesig", title="Dup"):
+    # insert a raw reference row to simulate a race-created duplicate
+    conn.execute(
+        "INSERT INTO reference (id, item_type, title, doi, content_sig, created_at, updated_at) "
+        "VALUES (?, 'article-journal', ?, ?, ?, datetime('now'), datetime('now'))",
+        (rid, title, doi, sig))
+    conn.commit()
+
+
+def test_deduplicate_removes_extra_copies_and_keeps_one(client):
+    conn = client.app.state  # not used; go through the API + a direct db for setup
+    # import once, then simulate a race by inserting an identical second copy directly
+    client.post("/v1/library/import",
+                json={"format": "ris", "text": "TY  - JOUR\nTI  - Race paper\nAU  - X, Y\nPY  - 2020\nDO  - 10.9/race\nER  - "})
+    from sanad_core import db as _db
+    c2 = _db.connect(client.app.state.db_path)
+    _dup_reference(c2, "dup-race-1", doi="10.9/RACE", title="Race paper (dup)")  # same DOI, diff case
+    c2.close()
+
+    dupes = client.get("/v1/library/duplicates").json()
+    assert dupes["duplicate_count"] == 1
+
+    before = client.get("/v1/library?limit=500").json()["total"]
+    r = client.post("/v1/library/deduplicate").json()
+    assert r["removed"] == 1
+    after = client.get("/v1/library?limit=500").json()["total"]
+    assert after == before - 1
+    # idempotent: running again finds nothing
+    assert client.get("/v1/library/duplicates").json()["duplicate_count"] == 0
+    assert client.post("/v1/library/deduplicate").json()["removed"] == 0
+
+
+def test_deduplicate_repoints_citations_to_the_kept_copy(seeded):
+    # two identical references (same content sig, no DOI); cite the one that will be removed
+    from sanad_core import db as _db
+    c2 = _db.connect(seeded.app.state.db_path)
+    _dup_reference(c2, "keep-1", doi=None, sig="csig-1", title="Shared work")
+    _dup_reference(c2, "remove-1", doi=None, sig="csig-1", title="Shared work")
+    # keep-1 was created first -> canonical; cite remove-1 in a document
+    c2.execute("INSERT INTO document (id) VALUES ('docD')")
+    c2.execute("INSERT INTO citation (id, document_id, reference_ids, created_at) "
+               "VALUES ('citD','docD',?,datetime('now'))", ('["remove-1"]',))
+    c2.commit(); c2.close()
+
+    seeded.post("/v1/library/deduplicate")
+    c3 = _db.connect(seeded.app.state.db_path)
+    import json as _json
+    row = c3.execute("SELECT reference_ids FROM citation WHERE id='citD'").fetchone()
+    ids = _json.loads(row["reference_ids"])
+    c3.close()
+    assert ids == ["keep-1"]  # citation repointed to the surviving copy, not left dangling
+
+
 def test_library_list_filters_by_query(client):
     client.post("/v1/library/import", json={"format": "ris", "text": _ris_batch(120)})
     all_ = client.get("/v1/library?limit=200").json()

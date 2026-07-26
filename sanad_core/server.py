@@ -204,6 +204,16 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
     def library_search(q: str = "", limit: int = 20, conn=Depends(get_conn)):
         return {"results": documents.search_library(conn, q, limit)}
 
+    @app.get("/v1/library/duplicates")
+    def library_duplicates(conn=Depends(get_conn)):
+        groups = documents.find_duplicate_groups(conn)
+        return {"groups": len(groups),
+                "duplicate_count": sum(len(g["remove"]) for g in groups)}
+
+    @app.post("/v1/library/deduplicate")
+    def library_deduplicate(conn=Depends(get_conn)):
+        return documents.deduplicate_library(conn)
+
     @app.get("/v1/library")
     def library_list(q: str = "", limit: int = 200, offset: int = 0,
                      conn=Depends(get_conn)):
