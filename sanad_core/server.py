@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from . import __version__, db, documents, embedding, importer, integrity, list_import, resolver
+from . import __version__, db, documents, embedding, importer, integrity, list_import, resolver, styles
 from . import style_profile as sp
 
 DEFAULT_HOST = "127.0.0.1"
@@ -346,6 +346,12 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
         pid = sp.save_profile(conn, profile)
         profile["id"] = pid
         return {"id": pid, "profile": sp.to_sanadstyle_json(profile)}
+
+    @app.get("/v1/styles")
+    def styles_search(q: str = "", limit: int = 40):
+        # searchable catalog over every bundled CSL style (~10,800), so the
+        # builder isn't limited to a hardcoded handful.
+        return {"styles": styles.search_styles(q, limit)}
 
     @app.get("/v1/style-profiles")
     def style_profiles_list(conn=Depends(get_conn)):

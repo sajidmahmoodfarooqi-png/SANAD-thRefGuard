@@ -323,6 +323,19 @@ def test_library_list_filters_by_query(client):
     assert one["total"] == 1 and one["results"][0]["title"].endswith("number 42")
 
 
+def test_styles_search_exposes_the_full_catalog(client):
+    # default returns the popular set; a query filters the ~10.8k bundled styles
+    default = client.get("/v1/styles").json()["styles"]
+    assert any(s["id"] == "apa" for s in default)
+    apa = client.get("/v1/styles?q=apa").json()["styles"]
+    assert apa and apa[0]["id"] == "apa" and "APA" in apa[0]["title"]
+    # alias: 'mla' resolves the MLA style even though its id has no 'mla'
+    mla = client.get("/v1/styles?q=mla").json()["styles"]
+    assert any(s["id"] == "modern-language-association" for s in mla)
+    # a real long-tail journal style is reachable
+    assert client.get("/v1/styles?q=ieee").json()["styles"][0]["id"] == "ieee"
+
+
 def test_list_and_get_style_profiles(client):
     pid = client.post("/v1/style-profiles/build", json={"name": "Only One"}).json()["id"]
     listing = client.get("/v1/style-profiles").json()["profiles"]

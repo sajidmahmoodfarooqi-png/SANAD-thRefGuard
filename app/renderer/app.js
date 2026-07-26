@@ -430,9 +430,10 @@ function openStyleBuilder() {
       <div class="field-row"><label>Profile name</label><input class="inp" id="spName" placeholder="e.g. Metropolitan University Thesis 2026"/></div>
       <div class="grid2">
         <div class="field-row"><label>University (optional)</label><input class="inp" id="spUni"/></div>
-        <div class="field-row"><label>Base style</label><select class="sel" id="spBase">
-          <option value="apa">APA 7th</option><option value="chicago-author-date">Chicago (author–date)</option>
-          <option value="harvard-cite-them-right">Harvard</option><option value="modern-language-association">MLA</option><option value="ieee">IEEE</option></select></div>
+        <div class="field-row"><label>Citation style</label>
+          <input class="inp" id="spBaseSearch" placeholder="Search 10,000+ styles — APA, MLA, Vancouver, a journal name…" autocomplete="off"/>
+          <select class="sel" id="spBase" size="6" style="margin-top:6px"></select>
+        </div>
       </div>
       <div class="grid2">
         <div class="field-row"><label>“et al.” from (authors)</label><input class="inp" id="spEtal" type="number" min="1" value="3"/></div>
@@ -445,12 +446,24 @@ function openStyleBuilder() {
       <label class="check"><input type="checkbox" id="spAmp"/> Use the word “and” in text instead of “&amp;”</label>
     </div>
     <div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn primary" id="spGo">Create profile</button></div>`);
+  // searchable style picker over the full bundled CSL catalog
+  const baseSel = modalEl.querySelector("#spBase"), baseSearch = modalEl.querySelector("#spBaseSearch");
+  async function loadStyles(q) {
+    try {
+      const { styles } = await api(`/v1/styles?q=${encodeURIComponent(q || "")}`);
+      baseSel.innerHTML = styles.map((s) => `<option value="${esc(s.id)}">${esc(s.title)}</option>`).join("")
+        || `<option value="" disabled>No matching styles</option>`;
+    } catch { baseSel.innerHTML = `<option value="apa">APA 7th</option>`; }
+  }
+  let styleTimer = null;
+  baseSearch.addEventListener("input", () => { clearTimeout(styleTimer); styleTimer = setTimeout(() => loadStyles(baseSearch.value), 250); });
+  loadStyles("");   // popular styles by default
   modalEl.querySelector("#spGo").addEventListener("click", async () => {
     const g = (id) => modalEl.querySelector(id);
     const form = {
       name: g("#spName").value.trim() || "New profile",
       university: g("#spUni").value.trim() || null,
-      based_on_csl: g("#spBase").value,
+      based_on_csl: g("#spBase").value || "apa",
       et_al_min: +g("#spEtal").value || 3,
       hanging_indent_cm: +g("#spIndent").value || 1.27,
       font_family: g("#spFont").value.trim(),
