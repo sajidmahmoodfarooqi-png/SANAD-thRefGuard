@@ -423,41 +423,59 @@ window.addEventListener("dragover", (e) => e.preventDefault());
 window.addEventListener("drop", (e) => e.preventDefault());
 
 // --- style profile builder ------------------------------------------------- //
-function openStyleBuilder() {
+function openStyleBuilder(prefill) {
+  const pf = prefill || {};
+  const val = (k, d) => (pf[k] != null ? pf[k] : d);
+  const banner = pf._detected ? `
+    <div class="detect-banner">
+      <b>Read from your manual — please confirm.</b>
+      <ul>${pf._detected.map((d) => `<li><b>${esc(d.field)}:</b> ${esc(String(d.value))} <span class="ev">“${esc(d.evidence)}”</span></li>`).join("")}</ul>
+      ${(pf._notes && pf._notes.length) ? `<div class="notes">${pf._notes.map((n) => esc(n)).join("<br/>")}</div>` : ""}
+    </div>` : "";
   openModal(`
-    <div class="modal-h"><h3>New style profile</h3><button class="modal-x" data-close>&times;</button></div>
+    <div class="modal-h"><h3>${pf._detected ? "Confirm style from manual" : "New style profile"}</h3><button class="modal-x" data-close>&times;</button></div>
     <div class="modal-b">
-      <div class="field-row"><label>Profile name</label><input class="inp" id="spName" placeholder="e.g. Metropolitan University Thesis 2026"/></div>
+      ${banner}
+      <div class="field-row"><label>Profile name</label><input class="inp" id="spName" value="${esc(val("name", ""))}" placeholder="e.g. Metropolitan University Thesis 2026"/></div>
       <div class="grid2">
-        <div class="field-row"><label>University (optional)</label><input class="inp" id="spUni"/></div>
+        <div class="field-row"><label>University (optional)</label><input class="inp" id="spUni" value="${esc(val("university", ""))}"/></div>
         <div class="field-row"><label>Citation style</label>
           <input class="inp" id="spBaseSearch" placeholder="Search 10,000+ styles — APA, MLA, Vancouver, a journal name…" autocomplete="off"/>
           <select class="sel" id="spBase" size="6" style="margin-top:6px"></select>
         </div>
       </div>
       <div class="grid2">
-        <div class="field-row"><label>“et al.” from (authors)</label><input class="inp" id="spEtal" type="number" min="1" value="3"/></div>
-        <div class="field-row"><label>Hanging indent (cm)</label><input class="inp" id="spIndent" type="number" step="0.01" value="1.27"/></div>
+        <div class="field-row"><label>Body font</label><input class="inp" id="spFont" value="${esc(val("font_family", "Times New Roman"))}"/></div>
+        <div class="field-row"><label>Font size (pt)</label><input class="inp" id="spSize" type="number" value="${esc(val("font_size_pt", 12))}"/></div>
       </div>
       <div class="grid2">
-        <div class="field-row"><label>Reference font</label><input class="inp" id="spFont" value="Times New Roman"/></div>
-        <div class="field-row"><label>Font size (pt)</label><input class="inp" id="spSize" type="number" value="12"/></div>
+        <div class="field-row"><label>Line spacing</label><select class="sel" id="spSpacing">
+          <option value="1">Single (1.0)</option><option value="1.5">1.5</option><option value="2">Double (2.0)</option></select></div>
+        <div class="field-row"><label>Page margin (cm)</label><input class="inp" id="spMargin" type="number" step="0.01" value="${esc(val("margin_cm", 2.54))}"/></div>
+      </div>
+      <div class="grid2">
+        <div class="field-row"><label>Reference hanging indent (cm)</label><input class="inp" id="spIndent" type="number" step="0.01" value="${esc(val("hanging_indent_cm", 1.27))}"/></div>
+        <div class="field-row"><label>“et al.” from (authors)</label><input class="inp" id="spEtal" type="number" min="1" value="3"/></div>
       </div>
       <label class="check"><input type="checkbox" id="spAmp"/> Use the word “and” in text instead of “&amp;”</label>
     </div>
-    <div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn primary" id="spGo">Create profile</button></div>`);
+    <div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn primary" id="spGo">${pf._detected ? "Save profile" : "Create profile"}</button></div>`);
   // searchable style picker over the full bundled CSL catalog
   const baseSel = modalEl.querySelector("#spBase"), baseSearch = modalEl.querySelector("#spBaseSearch");
   async function loadStyles(q) {
     try {
       const { styles } = await api(`/v1/styles?q=${encodeURIComponent(q || "")}`);
-      baseSel.innerHTML = styles.map((s) => `<option value="${esc(s.id)}">${esc(s.title)}</option>`).join("")
+      baseSel.innerHTML = styles.map((s) => `<option value="${esc(s.id)}"${s.id === pf.based_on_csl ? " selected" : ""}>${esc(s.title)}</option>`).join("")
         || `<option value="" disabled>No matching styles</option>`;
     } catch { baseSel.innerHTML = `<option value="apa">APA 7th</option>`; }
   }
   let styleTimer = null;
   baseSearch.addEventListener("input", () => { clearTimeout(styleTimer); styleTimer = setTimeout(() => loadStyles(baseSearch.value), 250); });
-  loadStyles("");   // popular styles by default
+  // if the manual named a style, search for it so it's selectable/selected
+  loadStyles(pf.based_on_csl || "");
+  // preselect detected line spacing
+  const sp = modalEl.querySelector("#spSpacing");
+  sp.value = String(val("line_spacing", 1) === 2.0 ? 2 : (val("line_spacing", 1) === 1.5 ? 1.5 : val("line_spacing", 1)));
   modalEl.querySelector("#spGo").addEventListener("click", async () => {
     const g = (id) => modalEl.querySelector(id);
     const form = {
@@ -466,6 +484,8 @@ function openStyleBuilder() {
       based_on_csl: g("#spBase").value || "apa",
       et_al_min: +g("#spEtal").value || 3,
       hanging_indent_cm: +g("#spIndent").value || 1.27,
+      line_spacing: +g("#spSpacing").value || 1,
+      margin_cm: +g("#spMargin").value || null,
       font_family: g("#spFont").value.trim(),
       font_size_pt: +g("#spSize").value || 12,
       ampersand_in_text: !g("#spAmp").checked,
@@ -477,6 +497,87 @@ function openStyleBuilder() {
     } catch (e) { toast("Couldn't create: " + e.message); }
   });
 }
+
+// --- create a profile from a thesis manual (local detect & confirm) -------- //
+const MANUAL_EXT = { docx: "docx", pdf: "pdf", txt: "txt" };
+function fromManual() {
+  const input = document.createElement("input");
+  input.type = "file"; input.accept = ".docx,.pdf,.txt";
+  input.addEventListener("change", () => {
+    const file = input.files[0]; if (!file) return;
+    const ext = (file.name.split(".").pop() || "").toLowerCase();
+    const fmt = MANUAL_EXT[ext];
+    if (!fmt) { toast("Upload the manual as .docx, .pdf or .txt"); return; }
+    toast("Reading your manual on-device…");
+    const reader = new FileReader();
+    const done = async (body) => {
+      try {
+        const r = await api("/v1/handbook/parse", { method: "POST", body: JSON.stringify(body) });
+        const pf = { ...r.form, _detected: r.detected, _notes: r.notes };
+        if (!pf.name) pf.name = file.name.replace(/\.[^.]+$/, "");
+        openStyleBuilder(pf);
+      } catch (e) { toast("Couldn't read the manual: " + e.message); }
+    };
+    if (fmt === "txt") { reader.onload = () => done({ format: "txt", text: reader.result }); reader.readAsText(file); }
+    else { reader.onload = () => done({ format: fmt, data_b64: abToB64(reader.result) }); reader.readAsArrayBuffer(file); }
+  });
+  input.click();
+}
+$("fromManualBtn")?.addEventListener("click", fromManual);
+
+// --- format the researcher's thesis .docx to a profile (local, offline) ---- //
+function formatThesis() {
+  api("/v1/style-profiles").then(({ profiles }) => {
+    if (!profiles.length) { toast("Create a style profile first (or build one from your manual)"); return; }
+    openModal(`
+      <div class="modal-h"><h3>Format my thesis</h3><button class="modal-x" data-close>&times;</button></div>
+      <div class="modal-b">
+        <div class="field-row"><label>Apply this style profile</label>
+          <select class="sel" id="ftProfile">${profiles.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("")}</select></div>
+        <div class="field-row" style="border-top:1px solid var(--hairline);padding-top:16px">
+          <label>Your thesis document (.docx)</label>
+          <div class="import-drop" id="ftDrop">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/></svg>
+            <div><b>Choose your .docx</b> or drag it here</div>
+            <span class="hint">SANAD applies the fonts, spacing, margins and reference indent to your document’s styles and hands it back. <b>Your words are never changed, and the file never leaves this computer.</b></span>
+          </div>
+          <input type="file" id="ftFile" accept=".docx" style="display:none"/>
+        </div>
+        <div id="ftResult"></div>
+      </div>
+      <div class="modal-f"><button class="btn" data-close>Close</button></div>`);
+    const drop = modalEl.querySelector("#ftDrop"), fileInput = modalEl.querySelector("#ftFile");
+    const run = (file) => {
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith(".docx")) { toast("Please choose a .docx file"); return; }
+      const profileId = modalEl.querySelector("#ftProfile").value;
+      modalEl.querySelector("#ftResult").innerHTML = `<p class="hint" style="margin-top:14px">Formatting on-device…</p>`;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const r = await api("/v1/documents/format", { method: "POST",
+            body: JSON.stringify({ profile_id: profileId, data_b64: abToB64(reader.result) }) });
+          const bytes = Uint8Array.from(atob(r.data_b64), (c) => c.charCodeAt(0));
+          const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+          const url = URL.createObjectURL(blob);
+          const outName = file.name.replace(/\.docx$/i, "") + " (formatted).docx";
+          modalEl.querySelector("#ftResult").innerHTML = `
+            <div class="detect-banner"><b>Done — your words are unchanged.</b>
+              <ul>${r.applied.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>
+              <a class="btn primary" id="ftDownload" download="${esc(outName)}" href="${url}">Download formatted thesis</a>
+            </div>`;
+        } catch (e) { modalEl.querySelector("#ftResult").innerHTML = `<p class="hint" style="color:var(--danger,#c0392b);margin-top:14px">Couldn’t format: ${esc(e.message)}</p>`; }
+      };
+      reader.readAsArrayBuffer(file);
+    };
+    drop.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", (e) => run(e.target.files[0]));
+    ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); drop.classList.add("drag"); }));
+    drop.addEventListener("dragleave", (e) => { e.preventDefault(); drop.classList.remove("drag"); });
+    drop.addEventListener("drop", (e) => { e.preventDefault(); e.stopPropagation(); drop.classList.remove("drag"); run(e.dataTransfer.files[0]); });
+  }).catch((e) => toast("Couldn't load profiles: " + e.message));
+}
+$("formatDocBtn")?.addEventListener("click", formatThesis);
 
 // --- live integrity demo --------------------------------------------------- //
 const DEMO_RIS = `TY  - BOOK

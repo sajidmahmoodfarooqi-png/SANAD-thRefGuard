@@ -9,6 +9,8 @@ uvicorn>=0.20               # ASGI server for FastAPI
 websockets>=11              # uvicorn's WebSocket impl, for the /v1/events channel
 pydantic>=2                 # request/response models
 openpyxl>=3.1               # Excel (.xlsx) reference-list import
+python-docx>=1.1            # read thesis manuals + apply formatting to thesis .docx (never prose)
+pymupdf>=1.24               # extract text from PDF thesis manuals (local only)
 # CSV and Word (.docx) list import use only the standard library.
 # Opt-in Crossref DOI resolution uses only the standard library (urllib).
 

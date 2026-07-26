@@ -478,9 +478,13 @@ def test_flag_update_bad_status_is_422(seeded):
 
 # -- honest stubs for later-sprint endpoints -------------------------------- #
 
-def test_handbook_parse_is_501(seeded):
-    r = seeded.post("/v1/handbook/parse")
-    assert r.status_code == 501
+def test_handbook_parse_now_detects(seeded):
+    # the old 501 stub is gone: the endpoint parses a manual locally (full
+    # behaviour covered in test_handbook.py)
+    r = seeded.post("/v1/handbook/parse",
+                    json={"format": "txt", "text": "Use APA style, Times New Roman 12 point."})
+    assert r.status_code == 200
+    assert r.json()["form"]["based_on_csl"] == "apa"
 
 
 # -- websocket -------------------------------------------------------------- #

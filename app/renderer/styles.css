@@ -94,6 +94,14 @@ body { font-family:var(--sans); color:var(--text); background:var(--surface); -w
 .import-drop .fmts { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-top:2px; }
 .import-drop .fmt { font-family:var(--mono); font-size:11px; padding:2px 8px; border-radius:999px;
   background:var(--elev); border:1px solid var(--hairline); color:var(--muted); }
+/* handbook detect-and-confirm banner */
+.detect-banner { border:1px solid color-mix(in srgb,var(--accent) 40%,var(--hairline)); background:color-mix(in srgb,var(--accent) 7%,transparent); border-radius:10px; padding:12px 14px; margin:0 0 16px; font-size:13px; }
+.detect-banner b { font-weight:600; }
+.detect-banner ul { margin:8px 0 0; padding-left:18px; }
+.detect-banner li { margin:3px 0; line-height:1.5; }
+.detect-banner .ev { color:var(--muted); font-style:italic; font-size:12px; }
+.detect-banner .notes { margin-top:8px; color:var(--muted); font-size:12.5px; line-height:1.6; }
+.detect-banner a.btn { margin-top:12px; text-decoration:none; }
 /* keyboard-only focus ring (mouse clicks don't trigger :focus-visible) */
 :focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:6px; }
 .btn:focus-visible, .prof:focus-visible { outline-offset:2px; }

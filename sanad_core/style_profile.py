@@ -91,6 +91,12 @@ def build_profile(form: dict) -> dict:
 
     if isinstance(form.get("document_structure"), dict):
         p["document_structure"] = form["document_structure"]
+    # whole-document page margins (all four sides), for the thesis-formatting pass
+    if form.get("margin_cm") is not None:
+        ds = p.get("document_structure") or {}
+        ds["enabled"] = True
+        ds["margin_cm"] = float(form["margin_cm"])
+        p["document_structure"] = ds
     return p
 
 

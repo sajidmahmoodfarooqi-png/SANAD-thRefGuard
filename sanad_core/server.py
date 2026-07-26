@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from . import __version__, db, documents, embedding, importer, integrity, list_import, resolver, styles
+from . import __version__, db, docformat, documents, embedding, handbook, importer, integrity, list_import, offline, resolver, styles
 from . import style_profile as sp
 
 DEFAULT_HOST = "127.0.0.1"
@@ -32,6 +32,7 @@ DEFAULT_PORT = 23890
 # an import body larger than this is refused (memory-exhaustion guard). 8 MB of
 # RIS/BibTeX is tens of thousands of references -- far beyond any real paste.
 MAX_IMPORT_CHARS = 8_000_000
+MAX_DOC_CHARS = 80_000_000   # a thesis .docx (with images) as base64 — ~60 MB binary
 
 
 # --------------------------------------------------------------------------- #
@@ -50,6 +51,12 @@ class CitationUpdate(BaseModel):
 
 class StyleProfileApply(BaseModel):
     document_id: str
+
+
+class FormatRequest(BaseModel):
+    data_b64: str | None = None       # the thesis .docx, base64
+    profile_id: str | None = None     # apply a saved profile by id
+    profile: dict | None = None       # …or an inline profile (e.g. straight from handbook detect)
 
 
 class ImportRequest(BaseModel):
@@ -381,6 +388,34 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
             raise HTTPException(404, f"no style profile {profile_id!r}")
         return {"deleted": profile_id}
 
+    @app.post("/v1/documents/format")
+    def document_format(req: FormatRequest, conn=Depends(get_conn)):
+        # apply a profile's formatting to the user's thesis .docx and hand it back.
+        # runs fully local (docformat wraps it in the offline guard) and never
+        # changes prose (docformat asserts a byte-identical text fingerprint).
+        if not req.data_b64:
+            raise HTTPException(400, "provide the thesis .docx as data_b64")
+        if len(req.data_b64) > MAX_DOC_CHARS:
+            raise HTTPException(413, f"document too large (>{MAX_DOC_CHARS} base64 chars)")
+        try:
+            data = base64.b64decode(req.data_b64, validate=True)
+        except Exception:
+            raise HTTPException(400, "data_b64 is not valid base64")
+        if req.profile_id:
+            profile = sp.get_profile(conn, req.profile_id)
+            if profile is None:
+                raise HTTPException(404, f"no style profile {req.profile_id!r}")
+        elif isinstance(req.profile, dict):
+            profile = req.profile
+        else:
+            raise HTTPException(400, "provide profile_id or an inline profile")
+        try:
+            result = docformat.apply_profile_to_docx(data, profile)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {"applied": result["applied"],
+                "data_b64": base64.b64encode(result["data"]).decode("ascii")}
+
     @app.post("/v1/style-profiles/{profile_id}/apply")
     def style_profile_apply(profile_id: str, body: StyleProfileApply, conn=Depends(get_conn)):
         if sp.get_profile(conn, profile_id) is None:
@@ -389,14 +424,33 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
         return {"rerendered_citations": n,
                 "bibliography": documents.render_bibliography(conn, body.document_id)}
 
-    # -- handbook parse: v1.x (honest 501, never a fabricated profile) ------ #
+    # -- handbook parse: local detect-and-confirm --------------------------- #
     @app.post("/v1/handbook/parse")
-    def handbook_parse():
-        raise HTTPException(
-            501,
-            "Handbook parsing is a v1.x feature (MVP_SPEC.md §4/§8). Until then, "
-            "build a Style Profile via POST /v1/style-profiles.",
-        )
+    def handbook_parse(req: ImportRequest):
+        # read + detect entirely on-device (wrapped in the offline guard so the
+        # manual can never leave the machine), then return a DRAFT the user
+        # confirms -- nothing is applied or invented here.
+        fmt = req.format.lower()
+        if fmt not in ("docx", "pdf", "txt"):
+            raise HTTPException(400, f"unsupported manual format {req.format!r} (use docx, pdf or txt)")
+        if req.data_b64:
+            if len(req.data_b64) > MAX_IMPORT_CHARS:
+                raise HTTPException(413, "manual too large")
+            try:
+                data = base64.b64decode(req.data_b64, validate=True)
+            except Exception:
+                raise HTTPException(400, "data_b64 is not valid base64")
+        elif req.text:
+            data = req.text.encode("utf-8")
+            fmt = "txt"
+        else:
+            raise HTTPException(400, "provide the manual as data_b64 (docx/pdf) or text (txt)")
+        try:
+            with offline.no_network():
+                text = handbook.extract_text(data, fmt)
+                return handbook.detect_rules(text)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
 
     # -- events (server -> add-in push channel) ----------------------------- #
     @app.websocket("/v1/events")

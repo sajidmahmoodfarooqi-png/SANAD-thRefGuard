@@ -31,6 +31,8 @@ def main() -> int:
         "--collect-all", "citeproc",
         "--collect-all", "citeproc_styles",
         "--collect-all", "openpyxl",  # lazily imported in list_import.parse_xlsx
+        "--collect-all", "docx",      # python-docx: manual reading + thesis formatting
+        "--collect-all", "fitz",      # PyMuPDF: PDF thesis-manual text extraction
         "--collect-submodules", "uvicorn",
         "--collect-submodules", "sanad_core",
         "--hidden-import", "websockets",
