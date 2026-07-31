@@ -1,0 +1,15 @@
+{
+  "name": "sanad-word-addin",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Local-run tooling for the SANAD Word add-in (dev/testing only).",
+  "scripts": {
+    "dev-server": "node dev-server.js",
+    "start": "office-addin-debugging start manifest.xml",
+    "stop": "office-addin-debugging stop manifest.xml"
+  },
+  "devDependencies": {
+    "office-addin-debugging": "^6.0.2",
+    "office-addin-dev-certs": "^1.13.0"
+  }
+}

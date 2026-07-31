@@ -32,3 +32,6 @@ app/dist/
 # Core session token (per-launch, never committed)
 *.token
 sanad.token
+
+# add-in local-run deps
+connectors/word/node_modules/
