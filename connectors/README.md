@@ -6,39 +6,71 @@ This is the deliberate "add-in is a thin client" design from `MVP_SPEC.md §3`.
 
 ## `word/` — Microsoft Word add-in (Office.js)
 
-Inserts citations as content controls tagged `sanad-cite` (the only place it ever
-writes) and runs the integrity check in a task pane.
+A task pane that does the real citation work **inside your document**, writing
+only inside its own tagged content controls — never your prose:
 
-### Try it in development
+- **Insert** — search your local library, insert a citation at the cursor
+  (wrapped in a `sanad-cite` content control).
+- **Reference list** — rebuild the whole bibliography from the document's
+  citations, in your Style Profile's formatting, inside the single
+  `sanad-bibliography` control (created if absent, updated in place if present).
+- **Integrity** — run SANAD's Tier-A + Tier-B checks over every citation.
+- **Connect** — paste the Core's per-launch session token once.
 
-1. **Run the Core** — start the SANAD desktop app, or:
+The bundle (`taskpane.html/.css/.js`, `assets/`, `manifest.xml`) is fully
+self-contained and has a real add-in `<Id>` GUID. It ships pointing at
+`https://localhost:3000` so you can test locally now, then host it by swapping
+that one URL.
+
+### A. Test it locally (fastest — no hosting yet)
+
+1. **Run the Core** — start the SANAD desktop app (or `python -m sanad_core.server`).
+   Note its session token (desktop app Settings, or the `sanad.token` file next
+   to your library).
+2. **Serve the task pane over HTTPS** from `connectors/word/`:
    ```bash
-   python -m sanad_core.server
+   npx office-addin-dev-certs install     # one-time trusted localhost cert
+   npx http-server -S -C "$(npx office-addin-dev-certs verify --json | jq -r .localhostCertPath)" \
+     -K "$(...keyPath)" -p 3000 .          # or simply: npx office-addin-debugging start manifest.xml
    ```
-2. **Serve the task pane over HTTPS** (Office add-ins require HTTPS; loopback is
-   allowed). From `connectors/word/`:
+   Easiest: `npx office-addin-debugging start manifest.xml` — it installs the
+   cert, serves on :3000, and sideloads into Word for you.
+3. **Sideload** (if not automated) — Word → *Insert → Add-ins → My Add-ins →
+   Upload My Add-in* → pick `manifest.xml`.
+4. In the pane: open **Connect**, paste the token, click Connect (status should
+   go green). Then **Insert** a citation, build the **Reference list**, run
+   **Integrity**.
+
+### B. Host it (for real use / distribution)
+
+The task pane is static files, so any HTTPS host works — your own domain
+subfolder/subdomain, or GitHub Pages.
+
+1. Upload the contents of `connectors/word/` (`taskpane.*`, `assets/`) to your
+   HTTPS host, e.g. `https://sanad.YOURDOMAIN/`.
+2. Produce a hosted manifest by swapping the one URL:
    ```bash
-   npx office-addin-dev-certs install        # one-time trusted localhost cert
-   npx http-server -S -p 3000 .              # or any static HTTPS server on :3000
+   sed 's#https://localhost:3000#https://sanad.YOURDOMAIN#g' \
+       manifest.xml > manifest.prod.xml
    ```
-   Copy the branding PNGs the manifest references (`icon-32.png`, `icon-64.png`)
-   from `assets/branding/` alongside the task pane, or update the manifest URLs.
-3. **Sideload the manifest** — in Word: *Insert → Add-ins → My Add-ins → Upload
-   My Add-in* → pick `word/manifest.xml`. (`npx office-addin-debugging start
-   word/manifest.xml` automates this.)
+3. Sideload `manifest.prod.xml` in Word (same Upload My Add-in step), or deploy
+   it via your Microsoft 365 admin centre for an organisation.
 
-Before sideloading, set a real GUID for `<Id>` in `manifest.xml`.
+**Privacy note:** only the task-pane *UI* is served from the host. Your document
+never leaves your machine — the pane talks only to the local Core on
+`127.0.0.1`, whose CORS + Host allow-list are scoped to loopback origins (see
+`sanad_core/server.py`). No document content is ever sent to the web host.
 
-### How it talks to the Core
+### The write boundary (unchanged guarantee)
 
-The task pane is served from `https://localhost:3000`; the Core is
-`http://127.0.0.1:23890`. Word's WebView2 treats `127.0.0.1` as a trustworthy
-loopback origin, and the Core's CORS is scoped to allow any `localhost` /
-`127.0.0.1` origin (see `sanad_core/server.py`). No cloud, no external host.
+The add-in writes in exactly two places, both tagged content controls it owns:
+`sanad-cite` (citations) and `sanad-bibliography` (the reference list). It never
+reads or writes your prose. `tests/test_addin_guarantee.py` statically enforces
+that no prose-writing Office API is reachable from `taskpane.js`.
 
 ## LibreOffice
 
 Same Core, a second thin client — LibreOffice uses a different extension model
 (Python/Basic UNO), but it speaks the same HTTP protocol and reuses the same
-`sanad-cite` content-control convention. Not built yet; it's a mechanical second
-client once the Word one is finished, since the protocol is stable.
+`sanad-cite` / `sanad-bibliography` conventions. Not built yet; it's a mechanical
+second client once the Word one is proven, since the protocol is stable.

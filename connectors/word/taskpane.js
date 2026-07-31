@@ -44,9 +44,23 @@ Office.onReady((info) => {
   document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => showTab(t.dataset.tab)));
   $("q").addEventListener("input", debounce(search, 250));
   $("scanBtn").addEventListener("click", runIntegrity);
+  $("biblioBtn").addEventListener("click", insertBibliography);
+  $("saveTokenBtn").addEventListener("click", saveToken);
+  const tok = coreToken();
+  if (tok) $("token").value = tok;
   pollHealth();
   setInterval(pollHealth, 5000);
 });
+
+// --- connect: store the Core session token in this document's settings ------ //
+function saveToken() {
+  const v = ($("token").value || "").trim();
+  Office.context.document.settings.set("sanadToken", v);
+  Office.context.document.settings.saveAsync(() => {
+    $("connectMsg").innerHTML = v ? `<p class="muted">Saved. Checking connection…</p>` : `<p class="muted">Token cleared.</p>`;
+    pollHealth();
+  });
+}
 
 function showTab(name) {
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.dataset.tab === name));
@@ -86,6 +100,60 @@ async function insertCitation(refId) {
     await ctx.sync();
   });
   notify("Citation inserted");
+}
+
+// --- reference list -------------------------------------------------------- //
+// Rebuilds the whole bibliography from the document's citations and writes it
+// ONLY inside the single "sanad-bibliography" content control (created if absent,
+// updated in place if present). Formatting comes from the active Style Profile.
+async function insertBibliography() {
+  const msg = $("biblioMsg");
+  msg.innerHTML = `<p class="muted">Building reference list…</p>`;
+  let data;
+  try { data = await core(`/v1/documents/${docId()}/bibliography`); }
+  catch (e) { return (msg.innerHTML = `<p class="muted">Couldn't build it: ${esc(e.message)}</p>`); }
+  const entries = data.entries || [];
+  const ps = data.paragraph_style || {};
+  if (!entries.length) { return (msg.innerHTML = `<p class="muted">No SANAD citations in this document yet — insert some first.</p>`); }
+
+  try {
+    await Word.run(async (ctx) => {
+      // find our own bibliography control (the ONLY place we write here)
+      const existing = ctx.document.contentControls.getByTag("sanad-bibliography");
+      existing.load("items");
+      await ctx.sync();
+
+      let cc;
+      if (existing.items.length) {
+        cc = existing.items[0];
+        cc.clear();                       // safe: it is our tagged control
+      } else {
+        cc = ctx.document.getSelection().insertContentControl();
+        cc.tag = "sanad-bibliography";
+        cc.title = "SANAD Reference List";
+        cc.appearance = "BoundingBox";
+      }
+      // first entry replaces the (empty) control content; the rest become paragraphs
+      cc.insertText(entries[0], Word.InsertLocation.replace);
+      await ctx.sync();
+      for (let i = 1; i < entries.length; i++) cc.insertParagraph(entries[i], Word.InsertLocation.end);
+      await ctx.sync();
+
+      // apply the profile's paragraph formatting to every line of the list
+      const paras = cc.paragraphs;
+      paras.load("items");
+      await ctx.sync();
+      paras.items.forEach((p) => {
+        if (ps.fontName) p.font.name = ps.fontName;
+        if (ps.fontSizePt != null) p.font.size = ps.fontSizePt;
+        if (ps.spaceAfterPt != null) p.spaceAfter = ps.spaceAfterPt;
+        if (ps.leftIndentPt != null) p.leftIndent = ps.leftIndentPt;          // hanging indent:
+        if (ps.firstLineIndentPt != null) p.firstLineIndent = ps.firstLineIndentPt;  // negative first line
+      });
+      await ctx.sync();
+    });
+  } catch (e) { return (msg.innerHTML = `<p class="muted">Couldn't write the list: ${esc(e.message)}</p>`); }
+  msg.innerHTML = `<p class="muted">Reference list updated — ${entries.length} entr${entries.length === 1 ? "y" : "ies"}.</p>`;
 }
 
 // --- integrity ------------------------------------------------------------- //
