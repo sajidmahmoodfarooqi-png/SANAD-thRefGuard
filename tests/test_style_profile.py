@@ -143,6 +143,29 @@ def test_to_sanadstyle_json_has_full_field_set():
     assert "extracted_at" in doc["provenance"]
 
 
+def test_build_profile_maps_heading_styles_and_numbering():
+    p = style_profile.build_profile({
+        "name": "Thesis", "number_headings": True,
+        "title_font": "Cambria", "title_size_pt": 26,
+        "h1_font": "Cambria", "h1_size_pt": 16,
+        "h2_size_pt": 14, "h3_size_pt": 12,
+    })
+    ds = p["document_structure"]
+    assert ds["enabled"] is True
+    h = ds["headings"]
+    assert h["numbered"] is True
+    assert h["title"] == {"font": "Cambria", "size_pt": 26.0}
+    assert h["h1"] == {"font": "Cambria", "size_pt": 16.0}
+    assert h["h2"] == {"size_pt": 14.0}       # size-only heading, no font
+    assert h["h3"] == {"size_pt": 12.0}
+    assert style_profile.validate_profile(p) == []
+
+
+def test_build_profile_without_headings_omits_headings_key():
+    p = style_profile.build_profile({"name": "Plain", "font_family": "Georgia"})
+    assert "headings" not in (p.get("document_structure") or {})
+
+
 def test_list_profiles_returns_saved_profiles():
     conn = db.connect()
     style_profile.save_profile(conn, style_profile.build_profile({"name": "Alpha"}))

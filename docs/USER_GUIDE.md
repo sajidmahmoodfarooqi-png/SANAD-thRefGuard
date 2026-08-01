@@ -133,6 +133,13 @@ To create one: **Style profiles → New profile**, then set:
 - **Ampersand in text** — use "and" instead of "&".
 - **Hanging indent** — the reference-list indent, in centimetres.
 - **Reference font** — family and size for the bibliography.
+- **Headings (Word Styles gallery)** — the font and size for **Title** and
+  **Heading 1–3**, and an optional switch to **number your headings
+  automatically** using Word's standard scheme: Heading 1 → **1**, Heading 2 →
+  **1.1**, Heading 3 → **1.1.1**. Leave a heading's font blank to reuse the body
+  font. When applied, these land on the document's real Word styles, so the
+  numbers renumber themselves as you add chapters — and, like everything else
+  here, **not one word of your text is changed**.
 
 Save it, and it becomes available to apply to your documents. A profile is a
 small, shareable file — a future version lets you publish it so the next student

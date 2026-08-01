@@ -52,6 +52,97 @@ def test_reformat_rejects_non_docx():
         docformat.apply_profile_to_docx(b"not a docx at all", PROFILE)
 
 
+HEADING_PROSE = [
+    "Introduction",          # Heading 1
+    "Background",            # Heading 2
+    "Prior work",           # Heading 3
+    "The researcher's own body sentence, untouched.",
+]
+
+
+def _thesis_with_headings():
+    from docx import Document
+    doc = Document()
+    doc.add_paragraph(HEADING_PROSE[0], style="Heading 1")
+    doc.add_paragraph(HEADING_PROSE[1], style="Heading 2")
+    doc.add_paragraph(HEADING_PROSE[2], style="Heading 3")
+    doc.add_paragraph(HEADING_PROSE[3])
+    buf = io.BytesIO(); doc.save(buf); return buf.getvalue()
+
+
+HEADING_PROFILE = {
+    "paragraph_style": {"font_family": "Georgia", "font_size_pt": 12},
+    "document_structure": {"enabled": True, "headings": {
+        "numbered": True,
+        "title": {"font": "Cambria", "size_pt": 26},
+        "h1": {"font": "Cambria", "size_pt": 16},
+        "h2": {"font": "Cambria", "size_pt": 14},
+        "h3": {"size_pt": 12},           # no font → inherits body font
+    }}}
+
+
+def test_heading_fonts_and_sizes_applied_prose_untouched():
+    from docx import Document
+    from docx.shared import Pt
+    data = _thesis_with_headings()
+    before = docformat.text_fingerprint(data)
+    result = docformat.apply_profile_to_docx(data, HEADING_PROFILE)
+    after = docformat.text_fingerprint(result["data"])
+    assert before == after == HEADING_PROSE      # heading + body text all identical
+
+    doc = Document(io.BytesIO(result["data"]))
+    assert doc.styles["Title"].font.name == "Cambria"
+    assert doc.styles["Title"].font.size == Pt(26)
+    assert doc.styles["Heading 1"].font.size == Pt(16)
+    assert doc.styles["Heading 2"].font.size == Pt(14)
+    # h3 had no font of its own → falls back to the body font
+    assert doc.styles["Heading 3"].font.name == "Georgia"
+    assert doc.styles["Heading 3"].font.size == Pt(12)
+
+
+def test_multilevel_numbering_injected_and_linked():
+    from docx import Document
+    from docx.oxml.ns import qn
+    data = _thesis_with_headings()
+    result = docformat.apply_profile_to_docx(data, HEADING_PROFILE)
+    doc = Document(io.BytesIO(result["data"]))
+
+    # the 1 / 1.1 / 1.1.1 level texts exist in the numbering part
+    numbering = doc.part.numbering_part.element
+    texts = [e.get(qn("w:val")) for e in numbering.iter(qn("w:lvlText"))]
+    assert "%1" in texts and "%1.%2" in texts and "%1.%2.%3" in texts
+
+    # each heading style points at the right level of that same numId
+    def linked(style_name):
+        pPr = doc.styles[style_name].element.find(qn("w:pPr"))
+        numPr = pPr.find(qn("w:numPr")) if pPr is not None else None
+        assert numPr is not None, f"{style_name} not linked to numbering"
+        ilvl = numPr.find(qn("w:ilvl")).get(qn("w:val"))
+        numid = numPr.find(qn("w:numId")).get(qn("w:val"))
+        return ilvl, numid
+
+    l1, n1 = linked("Heading 1")
+    l2, n2 = linked("Heading 2")
+    l3, n3 = linked("Heading 3")
+    assert (l1, l2, l3) == ("0", "1", "2")       # standard Word mapping
+    assert n1 == n2 == n3                          # all the same list
+    assert any("1 / 1.1 / 1.1.1" in a for a in result["applied"])
+
+
+def test_headings_not_numbered_when_not_requested():
+    from docx import Document
+    from docx.oxml.ns import qn
+    data = _thesis_with_headings()
+    profile = {"document_structure": {"enabled": True, "headings": {
+        "h1": {"size_pt": 15}}}}          # sizes only, numbered omitted (falsy)
+    result = docformat.apply_profile_to_docx(data, profile)
+    doc = Document(io.BytesIO(result["data"]))
+    pPr = doc.styles["Heading 1"].element.find(qn("w:pPr"))
+    numPr = pPr.find(qn("w:numPr")) if pPr is not None else None
+    assert numPr is None                  # no numbering added
+    assert docformat.text_fingerprint(result["data"]) == HEADING_PROSE
+
+
 @pytest.fixture
 def client(tmp_path):
     app = create_app(tmp_path / "fmt.db")

@@ -221,6 +221,9 @@ async function showProfile(id) {
   try {
     const p = await api(`/v1/style-profiles/${id}`);
     const ov = p.csl_overrides || {}, ps = p.paragraph_style || {};
+    const ds = p.document_structure || {}, hd = ds.headings || {};
+    const hspec = (s) => s && (s.font || s.size_pt != null)
+      ? [s.font || "(body font)", s.size_pt != null ? s.size_pt + " pt" : ""].filter(Boolean).join(" · ") : "";
     $("profBody").innerHTML = `
       <h3>${esc(p.name)}</h3>
       <p style="font-size:12.5px;color:var(--muted);margin:0 0 16px">${esc(p.university || "—")} · based on ${esc(p.based_on_csl)}</p>
@@ -229,6 +232,12 @@ async function showProfile(id) {
       ${ov.ampersand_in_text != null ? row("Ampersand in text", ov.ampersand_in_text ? "&" : "and") : ""}
       ${ps.bibliography_hanging_indent_cm != null ? row("Hanging indent", ps.bibliography_hanging_indent_cm + " cm") : ""}
       ${ps.font_family ? row("Reference font", ps.font_family + (ps.font_size_pt ? " " + ps.font_size_pt : "")) : ""}
+      ${ds.margin_cm != null ? row("Page margin", ds.margin_cm + " cm") : ""}
+      ${hspec(hd.title) ? row("Title style", hspec(hd.title)) : ""}
+      ${hspec(hd.h1) ? row("Heading 1", hspec(hd.h1)) : ""}
+      ${hspec(hd.h2) ? row("Heading 2", hspec(hd.h2)) : ""}
+      ${hspec(hd.h3) ? row("Heading 3", hspec(hd.h3)) : ""}
+      ${hd.numbered ? row("Heading numbering", "1 / 1.1 / 1.1.1 (automatic)") : ""}
       <div style="display:flex;gap:8px;margin-top:20px">
         <button class="btn" id="profRename">Rename…</button>
         <button class="btn danger" id="profDelete">Delete</button>
@@ -458,6 +467,25 @@ function openStyleBuilder(prefill) {
         <div class="field-row"><label>“et al.” from (authors)</label><input class="inp" id="spEtal" type="number" min="1" value="3"/></div>
       </div>
       <label class="check"><input type="checkbox" id="spAmp"/> Use the word “and” in text instead of “&amp;”</label>
+      <div class="sp-section-h">Headings (Word Styles gallery)</div>
+      <p class="sp-hint">Fonts &amp; sizes for Title and Heading 1–3, applied when you format a thesis. Your heading text is never changed — only the style.</p>
+      <div class="grid2">
+        <div class="field-row"><label>Title font</label><input class="inp" id="spTitleFont" value="${esc(val("title_font", ""))}" placeholder="(same as body)"/></div>
+        <div class="field-row"><label>Title size (pt)</label><input class="inp" id="spTitleSize" type="number" step="0.5" value="${esc(val("title_size_pt", ""))}" placeholder="e.g. 26"/></div>
+      </div>
+      <div class="grid2">
+        <div class="field-row"><label>Heading 1 font</label><input class="inp" id="spH1Font" value="${esc(val("h1_font", ""))}" placeholder="(same as body)"/></div>
+        <div class="field-row"><label>Heading 1 size (pt)</label><input class="inp" id="spH1Size" type="number" step="0.5" value="${esc(val("h1_size_pt", ""))}" placeholder="e.g. 16"/></div>
+      </div>
+      <div class="grid2">
+        <div class="field-row"><label>Heading 2 font</label><input class="inp" id="spH2Font" value="${esc(val("h2_font", ""))}" placeholder="(same as body)"/></div>
+        <div class="field-row"><label>Heading 2 size (pt)</label><input class="inp" id="spH2Size" type="number" step="0.5" value="${esc(val("h2_size_pt", ""))}" placeholder="e.g. 14"/></div>
+      </div>
+      <div class="grid2">
+        <div class="field-row"><label>Heading 3 font</label><input class="inp" id="spH3Font" value="${esc(val("h3_font", ""))}" placeholder="(same as body)"/></div>
+        <div class="field-row"><label>Heading 3 size (pt)</label><input class="inp" id="spH3Size" type="number" step="0.5" value="${esc(val("h3_size_pt", ""))}" placeholder="e.g. 12"/></div>
+      </div>
+      <label class="check"><input type="checkbox" id="spNumber"/> Number headings automatically — <b>1</b>, <b>1.1</b>, <b>1.1.1</b> (Word’s standard multilevel scheme)</label>
     </div>
     <div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn primary" id="spGo">${pf._detected ? "Save profile" : "Create profile"}</button></div>`);
   // searchable style picker over the full bundled CSL catalog
@@ -476,6 +504,7 @@ function openStyleBuilder(prefill) {
   // preselect detected line spacing
   const sp = modalEl.querySelector("#spSpacing");
   sp.value = String(val("line_spacing", 1) === 2.0 ? 2 : (val("line_spacing", 1) === 1.5 ? 1.5 : val("line_spacing", 1)));
+  if (val("number_headings", false)) modalEl.querySelector("#spNumber").checked = true;
   modalEl.querySelector("#spGo").addEventListener("click", async () => {
     const g = (id) => modalEl.querySelector(id);
     const form = {
@@ -490,7 +519,17 @@ function openStyleBuilder(prefill) {
       font_size_pt: +g("#spSize").value || 12,
       ampersand_in_text: !g("#spAmp").checked,
       ampersand_in_bibliography: true,
+      number_headings: g("#spNumber").checked,
     };
+    // headings: send font/size only when the user actually entered one
+    const num = (id) => { const v = g(id).value.trim(); return v === "" ? null : (+v || null); };
+    const txt = (id) => g(id).value.trim() || null;
+    Object.assign(form, {
+      title_font: txt("#spTitleFont"), title_size_pt: num("#spTitleSize"),
+      h1_font: txt("#spH1Font"), h1_size_pt: num("#spH1Size"),
+      h2_font: txt("#spH2Font"), h2_size_pt: num("#spH2Size"),
+      h3_font: txt("#spH3Font"), h3_size_pt: num("#spH3Size"),
+    });
     try {
       await api("/v1/style-profiles/build", { method: "POST", body: JSON.stringify(form) });
       closeModal(); toast("Profile created"); go("style");

@@ -36,6 +36,74 @@ def text_fingerprint(data: bytes) -> list[str]:
     return out
 
 
+def _add_multilevel_numbering(doc):
+    """Inject a Word multilevel list (1 / 1.1 / 1.1.1) into the document's
+    numbering part and return its numId. Word has no high-level API for this, so
+    it is raw OOXML — but it only adds a numbering *definition*, never any text."""
+    from docx.oxml import parse_xml
+    from docx.oxml.ns import qn, nsdecls
+
+    numbering = doc.part.numbering_part.element
+    aids = [int(e.get(qn("w:abstractNumId"))) for e in numbering.findall(qn("w:abstractNum"))]
+    nids = [int(e.get(qn("w:numId"))) for e in numbering.findall(qn("w:num"))]
+    aid = (max(aids) + 1) if aids else 0
+    nid = (max(nids) + 1) if nids else 1
+    lvls = ""
+    for i, fmt in enumerate(("%1", "%1.%2", "%1.%2.%3")):  # Heading 1/2/3 = 1 / 1.1 / 1.1.1
+        lvls += (f'<w:lvl w:ilvl="{i}"><w:start w:val="1"/><w:numFmt w:val="decimal"/>'
+                 f'<w:lvlText w:val="{fmt}"/><w:lvlJc w:val="left"/>'
+                 f'<w:pPr><w:ind w:left="0" w:hanging="0"/></w:pPr></w:lvl>')
+    abs_el = parse_xml(f'<w:abstractNum {nsdecls("w")} w:abstractNumId="{aid}">'
+                       f'<w:multiLevelType w:val="multilevel"/>{lvls}</w:abstractNum>')
+    num_el = parse_xml(f'<w:num {nsdecls("w")} w:numId="{nid}"><w:abstractNumId w:val="{aid}"/></w:num>')
+    first_num = numbering.find(qn("w:num"))
+    first_num.addprevious(abs_el) if first_num is not None else numbering.append(abs_el)
+    numbering.append(num_el)
+    return nid
+
+
+def _link_heading_numbering(doc, style_name, ilvl, numid):
+    """Bind a heading style to a level of the numbering list, so every paragraph
+    using that style is auto-numbered by Word (the number is rendered, not typed)."""
+    from docx.oxml.ns import qn
+    pPr = doc.styles[style_name].element.get_or_add_pPr()
+    for old in pPr.findall(qn("w:numPr")):
+        pPr.remove(old)
+    numPr = pPr.get_or_add_numPr()
+    numPr.get_or_add_ilvl().val = ilvl
+    numPr.get_or_add_numId().val = numid
+
+
+def _apply_headings(doc, headings, body_font, applied):
+    """Set Title / Heading 1-3 fonts + sizes and, if requested, the 1/1.1/1.1.1
+    multilevel numbering. Falls back to the body font for headings with none set."""
+    from docx.shared import Pt
+
+    levels = {"Title": headings.get("title") or {}, "Heading 1": headings.get("h1") or {},
+              "Heading 2": headings.get("h2") or {}, "Heading 3": headings.get("h3") or {}}
+    for name, spec in levels.items():
+        try:
+            style = doc.styles[name]
+        except KeyError:
+            continue
+        font = spec.get("font") or body_font
+        if font:
+            style.font.name = font
+        if spec.get("size_pt") is not None:
+            style.font.size = Pt(float(spec["size_pt"]))
+            applied.append(f"{name} size → {spec['size_pt']} pt")
+
+    if headings.get("numbered"):
+        try:
+            nid = _add_multilevel_numbering(doc)
+            for name, ilvl in (("Heading 1", 0), ("Heading 2", 1), ("Heading 3", 2)):
+                if name in [s.name for s in doc.styles]:
+                    _link_heading_numbering(doc, name, ilvl, nid)
+            applied.append("Heading numbering → 1 / 1.1 / 1.1.1 (Heading 1/2/3)")
+        except Exception:  # numbering is best-effort; never fail the whole reformat
+            applied.append("Heading numbering: skipped (document has no numbering part)")
+
+
 def apply_profile_to_docx(data: bytes, profile: dict) -> dict:
     """Reformat the .docx to the profile. Returns {data (bytes), applied (list)}.
     Raises ValueError on a non-.docx or corrupt file. Never touches prose."""
@@ -79,13 +147,9 @@ def apply_profile_to_docx(data: bytes, profile: dict) -> dict:
                 section.left_margin = section.right_margin = Cm(float(margin_cm))
             applied.append(f"Margins → {margin_cm} cm")
 
-        # heading fonts follow the body font (a common manual requirement)
-        if font:
-            for name in ("Heading 1", "Heading 2", "Heading 3", "Title"):
-                try:
-                    doc.styles[name].font.name = font
-                except KeyError:
-                    pass
+        # Word Styles gallery: Title / Heading 1-3 fonts + sizes, and the
+        # standard 1 / 1.1 / 1.1.1 multilevel numbering when requested
+        _apply_headings(doc, ds.get("headings") or {}, font, applied)
 
         # reference list hanging indent: apply to the built-in Bibliography style
         # if the document uses it (positive left indent + equal negative first line)

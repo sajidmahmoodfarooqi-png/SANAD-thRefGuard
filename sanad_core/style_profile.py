@@ -97,6 +97,28 @@ def build_profile(form: dict) -> dict:
         ds["enabled"] = True
         ds["margin_cm"] = float(form["margin_cm"])
         p["document_structure"] = ds
+
+    # Word Styles gallery: Title / Heading 1-3 fonts + sizes, and the standard
+    # 1 / 1.1 / 1.1.1 multilevel numbering (applied by docformat to the .docx).
+    heading_keys = ("title", "h1", "h2", "h3")
+    has_headings = form.get("number_headings") is not None or any(
+        form.get(f"{k}_font") or form.get(f"{k}_size_pt") is not None for k in heading_keys)
+    if has_headings:
+        ds = p.get("document_structure") or {}
+        ds["enabled"] = True
+        headings = ds.get("headings") or {}
+        if form.get("number_headings") is not None:
+            headings["numbered"] = bool(form["number_headings"])
+        for k in heading_keys:
+            spec = {}
+            if form.get(f"{k}_font"):
+                spec["font"] = form[f"{k}_font"]
+            if form.get(f"{k}_size_pt") is not None:
+                spec["size_pt"] = float(form[f"{k}_size_pt"])
+            if spec:
+                headings[k] = spec
+        ds["headings"] = headings
+        p["document_structure"] = ds
     return p
 
 
