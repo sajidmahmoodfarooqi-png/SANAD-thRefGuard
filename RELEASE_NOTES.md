@@ -1,5 +1,58 @@
 # Release notes
 
+## v0.2.0 — thesis formatting, the Word add-in, and integrity fixes
+
+Builds on v0.1.0 with the two things that make SANAD usable end-to-end inside
+Word, plus real correctness fixes. Everything still runs on your own machine —
+no account, no cloud, no telemetry.
+
+### New
+
+- **Format your thesis to your handbook.** Read a university format manual
+  locally, confirm the detected Style Profile, then reformat your `.docx` — body
+  font/size/spacing, margins, and the reference-list hanging indent — under the
+  **"never touches your prose" guarantee** (enforced in code: every word is
+  fingerprinted before and after, and the whole pass runs with the network
+  sealed off).
+- **Word Styles gallery.** Style Profiles now carry heading styles — a font and
+  size for **Title** and **Heading 1–3** — and an optional switch to **number
+  headings automatically** in Word's standard scheme: Heading 1 → `1`,
+  Heading 2 → `1.1`, Heading 3 → `1.1.1`. Numbers land on the document's real
+  Word styles, so they renumber themselves; no number is ever typed into prose.
+- **Word add-in (Office.js task pane).** Insert citations from your local
+  library, rebuild the whole reference list, and run the integrity check — all
+  **inside your document**, writing only inside its own tagged fields. The pane's
+  UI is hosted on GitHub Pages; your document never leaves your machine (it talks
+  only to the local Core on `127.0.0.1`). Sideload `connectors/word/manifest.prod.xml`.
+- **Complete offline help guide**, packaged with the app — a printable manual
+  opened from the Help screen's *Open the full guide* button, no network needed.
+
+### Fixed
+
+- **Duplicate detection across DOI formats.** The same work imported twice — one
+  entry storing its DOI bare, the other as a `doi.org` URL (or `doi:`-prefixed,
+  or a different case) — was compared verbatim and slipped past both import-time
+  dedup and the duplicate detector, so the *Remove duplicates* button never
+  appeared. DOIs are now canonicalised on import and in detection, so these
+  collapse correctly — and a library imported before this fix is caught too.
+
+### Install (Windows)
+
+Run `SANAD Setup 0.2.0.exe`. The build is **unsigned**, so Windows SmartScreen
+shows an "unknown publisher" notice — click **More info → Run anyway**. A
+portable `win-unpacked` build is also produced if you prefer not to install.
+
+### Known limitations
+
+- **Unsigned** — SmartScreen/Gatekeeper warns on first run. Code signing is a
+  later step.
+- **macOS `.dmg` / Linux `.AppImage`** are configured but must be built on their
+  own OS.
+- The real semantic model (`sentence-transformers`) is optional; without it, R8
+  uses a deterministic lexical proxy and says so.
+
+---
+
 ## v0.1.0 — first packaged release
 
 **SANAD the RefGuard** is a local-first, open-source citation companion for
