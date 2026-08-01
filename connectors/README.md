@@ -43,18 +43,34 @@ that one URL.
 
 ### B. Host it (for real use / distribution)
 
-The task pane is static files, so any HTTPS host works — your own domain
-subfolder/subdomain, or GitHub Pages.
+The task pane is static files, so any HTTPS host works. This project hosts them
+on **GitHub Pages**, served from the dedicated **`gh-pages`** branch (which
+contains *only* the pane's files — `taskpane.*`, `assets/`, a small landing
+`index.html`, and `.nojekyll`), at:
 
-1. Upload the contents of `connectors/word/` (`taskpane.*`, `assets/`) to your
-   HTTPS host, e.g. `https://sanad.YOURDOMAIN/`.
-2. Produce a hosted manifest by swapping the one URL:
-   ```bash
-   sed 's#https://localhost:3000#https://sanad.YOURDOMAIN#g' \
-       manifest.xml > manifest.prod.xml
-   ```
-3. Sideload `manifest.prod.xml` in Word (same Upload My Add-in step), or deploy
-   it via your Microsoft 365 admin centre for an organisation.
+```
+https://sajidmahmoodfarooqi-png.github.io/SANAD-thRefGuard/taskpane.html
+```
+
+**One-time setup (repo owner, in the browser):** GitHub → repo **Settings →
+Pages** → *Source* = **Deploy from a branch** → *Branch* = **`gh-pages`** / `/`
+(root) → **Save**. The site goes live within a minute; every later push to
+`gh-pages` redeploys it automatically.
+
+**The hosted manifest is already generated** as
+[`word/manifest.prod.xml`](word/manifest.prod.xml) — the same file as
+`manifest.xml` with the one base URL swapped from `https://localhost:3000` to the
+Pages URL above. To regenerate it (e.g. for a different host):
+
+```bash
+sed 's#https://localhost:3000#https://YOUR-HTTPS-BASE#g' \
+    word/manifest.xml > word/manifest.prod.xml
+```
+
+Sideload `manifest.prod.xml` in Word (same *Upload My Add-in* step), or deploy it
+via your Microsoft 365 admin centre for an organisation. The manifest itself is
+**not** served from the web — Word loads it locally; only the pane's UI
+(`taskpane.html` and friends) is fetched from the Pages URL.
 
 **Privacy note:** only the task-pane *UI* is served from the host. Your document
 never leaves your machine — the pane talks only to the local Core on
