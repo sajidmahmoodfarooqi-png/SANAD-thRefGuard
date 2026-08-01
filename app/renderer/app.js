@@ -88,6 +88,7 @@ async function pollHealth() {
 const LIB_PAGE = 200;   // rows rendered per page — the whole library is reachable via paging
 let libOffset = 0;
 let libLastQuery = null;
+let libSort = "year";   // "title"/"title_desc"/"year"/"year_asc" — click a column header to change
 
 async function loadLibrary() {
   const wrap = $("libListWrap");
@@ -96,7 +97,7 @@ async function loadLibrary() {
 
   let results = [], total = 0;
   try {
-    const data = await api(`/v1/library?q=${encodeURIComponent(q)}&limit=${LIB_PAGE}&offset=${libOffset}`);
+    const data = await api(`/v1/library?q=${encodeURIComponent(q)}&limit=${LIB_PAGE}&offset=${libOffset}&sort=${libSort}`);
     results = data.results; total = data.total ?? results.length;
   } catch {
     wrap.innerHTML = `<div class="empty"><h3>Core not reachable</h3><p>The SANAD Core service isn't responding. It should start automatically with the app.</p></div>`;
@@ -132,7 +133,19 @@ async function loadLibrary() {
       <button class="btn small" id="libNext" ${to >= total ? "disabled" : ""}>Next →</button>
     </div>` : "";
 
-  wrap.innerHTML = `<table class="lib"><thead><tr><th>Title</th><th>Authors</th><th>Year</th><th>Type</th></tr></thead><tbody>${rows}</tbody></table>${pager}`;
+  const titleArrow = libSort === "title" ? " ▲" : (libSort === "title_desc" ? " ▼" : "");
+  const yearArrow = libSort === "year" ? " ▼" : (libSort === "year_asc" ? " ▲" : "");
+  wrap.innerHTML = `<table class="lib"><thead><tr>` +
+    `<th class="sortable" data-sort="title" title="Click to sort A–Z (clusters duplicates)">Title${titleArrow}</th>` +
+    `<th>Authors</th>` +
+    `<th class="sortable" data-sort="year" title="Click to sort by year">Year${yearArrow}</th>` +
+    `<th>Type</th></tr></thead><tbody>${rows}</tbody></table>${pager}`;
+  wrap.querySelectorAll("th.sortable").forEach((th) => th.addEventListener("click", () => {
+    const col = th.dataset.sort;
+    if (col === "title") libSort = libSort === "title" ? "title_desc" : "title";
+    else libSort = libSort === "year" ? "year_asc" : "year";
+    libOffset = 0; loadLibrary();
+  }));
   wrap.querySelectorAll("tbody tr").forEach((tr) => tr.addEventListener("click", () => {
     wrap.querySelectorAll("tr").forEach((x) => x.classList.remove("sel"));
     tr.classList.add("sel");
@@ -183,6 +196,7 @@ $("libDedupeBtn")?.addEventListener("click", openDedupe);
 
 function showDetail(r) {
   const d = $("libDetail");
+  if (!r) { d.style.display = "none"; return; }
   d.style.display = "block";
   d.innerHTML = `
     <div class="k" style="margin-top:0">Title</div><div class="dt">${esc(r.title)}</div>
@@ -190,7 +204,25 @@ function showDetail(r) {
     <div class="k">Year</div><div class="val">${r.year ?? "—"}</div>
     <div class="k">Type</div><div class="val">${esc(itemLabel(r.item_type))}</div>
     ${r.doi ? `<div class="k">DOI</div><div class="doi">${esc(r.doi)}</div>` : ""}
-    <div class="k">Reference id</div><div class="val" style="font-family:var(--mono);font-size:11px;color:var(--faint)">${esc(r.id)}</div>`;
+    <div class="k">Reference id</div><div class="val" style="font-family:var(--mono);font-size:11px;color:var(--faint)">${esc(r.id)}</div>
+    <button class="btn danger" id="refDelete" style="margin-top:18px">Delete this reference</button>`;
+  d.querySelector("#refDelete").addEventListener("click", () => deleteReference(r));
+}
+
+async function deleteReference(r) {
+  const title = (r.title || "").slice(0, 80);
+  openModal(`
+    <div class="modal-h"><h3>Delete reference?</h3><button class="modal-x" data-close>&times;</button></div>
+    <div class="modal-b"><p style="font-size:13.5px;line-height:1.6">Remove <b>${esc(title)}</b> from your library? This can't be undone. Any citation pointing at it is unlinked.</p></div>
+    <div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn danger" id="delRefGo">Delete</button></div>`);
+  modalEl.querySelector("#delRefGo").addEventListener("click", async () => {
+    try {
+      const res = await api(`/v1/library/${encodeURIComponent(r.id)}`, { method: "DELETE" });
+      closeModal();
+      toast(res.deleted ? `Deleted — library holds ${res.library_size}` : "Already gone");
+      loadLibrary();
+    } catch (e) { toast("Couldn't delete: " + e.message); }
+  });
 }
 
 // --- style profiles -------------------------------------------------------- //

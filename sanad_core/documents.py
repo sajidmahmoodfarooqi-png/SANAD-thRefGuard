@@ -246,24 +246,57 @@ def count_library(conn: sqlite3.Connection, q: str = "") -> int:
     return int(row["n"]) if row else 0
 
 
+# sort options for the Library view. Whitelisted (never interpolate user input
+# into SQL) -- title A-Z is what makes duplicates sit next to each other.
+_LIBRARY_SORTS = {
+    "title": "r.title COLLATE NOCASE ASC, r.year DESC",
+    "title_desc": "r.title COLLATE NOCASE DESC, r.year DESC",
+    "year": "r.year DESC, r.title COLLATE NOCASE ASC",
+    "year_asc": "r.year ASC, r.title COLLATE NOCASE ASC",
+}
+
+
 def list_library(conn: sqlite3.Connection, q: str = "", limit: int = 200,
-                 offset: int = 0) -> list[dict]:
+                 offset: int = 0, sort: str = "year") -> list[dict]:
     """Browse the whole library (or filtered by q), one page at a time. Unlike
     search_library (typeahead, small fixed cap) this is the paginated backing for
-    the Library view, so a library of any size is fully reachable."""
+    the Library view, so a library of any size is fully reachable. `sort` selects
+    the ordering (title A-Z, year, ...) so duplicates can be clustered by title."""
     like = f"%{q.strip()}%"
+    order = _LIBRARY_SORTS.get(sort, _LIBRARY_SORTS["year"])
     rows = conn.execute(
-        """SELECT DISTINCT r.id, r.title, r.year, r.doi, r.item_type
+        f"""SELECT DISTINCT r.id, r.title, r.year, r.doi, r.item_type
              FROM reference r
              LEFT JOIN reference_author ra ON ra.reference_id = r.id
              LEFT JOIN author a ON a.id = ra.author_id
             WHERE r.title LIKE ? OR a.family LIKE ? OR a.literal LIKE ?
                   OR CAST(r.year AS TEXT) LIKE ?
-            ORDER BY r.year DESC, r.title
+            ORDER BY {order}
             LIMIT ? OFFSET ?""",
         (like, like, like, like, max(1, min(limit, 1000)), max(0, offset)),
     ).fetchall()
     return _rows_to_refs(conn, rows)
+
+
+def delete_reference(conn: sqlite3.Connection, ref_id: str) -> dict:
+    """Delete a single reference (for manual de-duplication). Removes its author
+    links and drops it from any grouped citation's reference list so nothing is
+    left pointing at a deleted row. Returns {deleted: 0|1, library_size}."""
+    exists = conn.execute("SELECT 1 FROM reference WHERE id = ?", (ref_id,)).fetchone()
+    if not exists:
+        return {"deleted": 0, "library_size": count_library(conn)}
+    for cid, raw in conn.execute("SELECT id, reference_ids FROM citation").fetchall():
+        try:
+            ids = json.loads(raw) if raw else []
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if ref_id in ids:
+            conn.execute("UPDATE citation SET reference_ids = ? WHERE id = ?",
+                         (json.dumps([x for x in ids if x != ref_id]), cid))
+    conn.execute("DELETE FROM reference_author WHERE reference_id = ?", (ref_id,))
+    conn.execute("DELETE FROM reference WHERE id = ?", (ref_id,))
+    conn.commit()
+    return {"deleted": 1, "library_size": count_library(conn)}
 
 
 def search_library(conn: sqlite3.Connection, q: str, limit: int = 20) -> list[dict]:

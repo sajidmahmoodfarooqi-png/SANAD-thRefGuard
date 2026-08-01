@@ -1,5 +1,22 @@
 # Release notes
 
+## v0.2.3 — sort your library + delete a single reference
+
+Manual duplicate control, because the automatic detector only catches exact and
+DOI matches — not spelling/case variants (e.g. "Modeling" vs "modelling",
+"Characterisation" vs "Characterization") or citation text pasted into a title.
+
+- **Sort the library** — click the **Title** column header to sort A–Z (click
+  again for Z–A), or **Year**. Sorting by title puts near-identical entries right
+  next to each other, so you can spot duplicates by eye.
+- **Delete a single reference** — select a reference and click **Delete this
+  reference** (with a confirm). Any citation pointing at it is unlinked; the
+  count updates immediately.
+
+Together these give you a reliable, manual way to clean the library that doesn't
+depend on the automatic detector being perfect. (The automatic *Remove
+duplicates* button still handles exact/DOI duplicates as before.)
+
 ## v0.2.2 — thesis formatting: numbering fix, binding margin, captions
 
 All verified by rendering the formatted `.docx` to PDF (LibreOffice renders the

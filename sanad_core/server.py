@@ -223,14 +223,20 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
 
     @app.get("/v1/library")
     def library_list(q: str = "", limit: int = 200, offset: int = 0,
-                     conn=Depends(get_conn)):
+                     sort: str = "year", conn=Depends(get_conn)):
         # The paginated Library view: the whole library is reachable regardless of
-        # size (search_library above is only the small typeahead helper).
+        # size (search_library above is only the small typeahead helper). `sort`
+        # (title A-Z, year, ...) lets the user cluster duplicates by title.
         return {
-            "results": documents.list_library(conn, q, limit, offset),
+            "results": documents.list_library(conn, q, limit, offset, sort),
             "total": documents.count_library(conn, q),
-            "limit": limit, "offset": offset,
+            "limit": limit, "offset": offset, "sort": sort,
         }
+
+    @app.delete("/v1/library/{ref_id}")
+    def library_delete(ref_id: str, conn=Depends(get_conn)):
+        # remove a single reference (manual de-duplication)
+        return documents.delete_reference(conn, ref_id)
 
     @app.post("/v1/library/import")
     def library_import(req: ImportRequest, conn=Depends(get_conn)):

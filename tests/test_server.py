@@ -534,3 +534,20 @@ def test_event_hub_broadcasts_and_drops_dead_clients():
         assert len(live.sent) == 2
 
     asyncio.run(scenario())
+
+
+def test_library_sort_and_delete(client):
+    for t, y in (("Zebra paper", 2020), ("Apple paper", 2019), ("Mango paper", 2021)):
+        client.post("/v1/library/import",
+                    json={"format": "ris", "text": f"TY  - JOUR\nTI  - {t}\nAU  - X, Y\nPY  - {y}\nER  -"})
+    def titles(sort): return [r["title"] for r in client.get(f"/v1/library?sort={sort}").json()["results"]]
+    assert titles("title") == ["Apple paper", "Mango paper", "Zebra paper"]
+    assert titles("title_desc") == ["Zebra paper", "Mango paper", "Apple paper"]
+    assert titles("year")[0] == "Mango paper"          # 2021 newest first
+    # delete one and confirm it's gone
+    rid = next(r["id"] for r in client.get("/v1/library").json()["results"] if r["title"] == "Mango paper")
+    r = client.delete(f"/v1/library/{rid}").json()
+    assert r["deleted"] == 1 and r["library_size"] == 2
+    assert "Mango paper" not in titles("title")
+    # deleting again is a harmless no-op
+    assert client.delete(f"/v1/library/{rid}").json()["deleted"] == 0
