@@ -201,3 +201,48 @@ def test_csl_json_stored_is_valid_json_with_expected_shape():
     assert item["type"] == "book"
     assert item["issued"]["date-parts"] == [[2001]]
     assert item["author"] == [{"family": "Fisher", "given": "R. K."}]
+
+
+# --- DOI normalisation + duplicate detection across DOI forms --------------- #
+
+def test_normalize_doi_strips_prefixes_and_lowercases():
+    n = importer.normalize_doi
+    canon = "10.1016/j.landusepol.2020.104493"
+    assert n("10.1016/j.landusepol.2020.104493") == canon
+    assert n("https://doi.org/10.1016/J.LANDUSEPOL.2020.104493") == canon
+    assert n("http://dx.doi.org/10.1016/j.landusepol.2020.104493") == canon
+    assert n("doi: 10.1016/J.Landusepol.2020.104493") == canon
+    assert n("  10.1016/j.landusepol.2020.104493.  ".strip() + ".") == canon  # trailing dot
+    assert n("") is None and n(None) is None
+
+
+def test_doi_normalised_at_import_so_url_form_dedupes_in_place():
+    conn = db.connect()
+    # same DOI, one bare and one as a doi.org URL in a different case
+    importer.insert_reference(conn, {"title": "Same work", "year": 2020,
+                                     "doi": "10.1/abc"}, [{"family": "A"}])
+    importer.insert_reference(conn, {"title": "Same work (other pages)", "year": 2020,
+                                     "doi": "https://doi.org/10.1/ABC"}, [{"family": "A"}])
+    conn.commit()
+    # collapsed to one row, stored DOI is the canonical bare lowercase form
+    rows = conn.execute("SELECT doi FROM reference").fetchall()
+    assert len(rows) == 1
+    assert rows[0]["doi"] == "10.1/abc"
+
+
+def test_detection_catches_preexisting_rawdoi_duplicates():
+    from sanad_core import documents
+    conn = db.connect()
+    # simulate rows created by the OLD importer: same DOI, three raw forms
+    for i, doi in enumerate(("10.5/x", "https://doi.org/10.5/X", "doi:10.5/x")):
+        conn.execute("INSERT INTO reference (id,item_type,title,doi,content_sig,"
+                     "created_at,updated_at,csl_json) VALUES (?,?,?,?,?,?,?,?)",
+                     (f"r{i}", "article-journal", "Work", doi, f"sig{i}",
+                      f"2020-01-0{i+1}", f"2020-01-0{i+1}", "{}"))
+    conn.commit()
+    groups = documents.find_duplicate_groups(conn)
+    assert sum(len(g["remove"]) for g in groups) == 2      # 3 copies -> 2 removable
+    documents.deduplicate_library(conn)
+    kept = conn.execute("SELECT doi FROM reference").fetchall()
+    assert len(kept) == 1
+    assert kept[0]["doi"] == "10.5/x"                       # keeper canonicalised

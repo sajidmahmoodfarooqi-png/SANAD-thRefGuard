@@ -355,6 +355,22 @@ def _norm(value: object) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip().lower()
 
 
+# Strip the many equivalent ways a DOI is written so the same DOI always
+# compares equal: bare, "doi:"-prefixed, or a doi.org/dx.doi.org URL, any case.
+# DOIs are case-insensitive by spec and contain no whitespace, so we can safely
+# lower-case and remove spaces. Without this, one .ris entry storing a DOI as a
+# URL and another storing it bare read as two different works and never dedupe.
+_DOI_PREFIX = re.compile(r"^(?:doi:\s*|https?://(?:dx\.)?doi\.org/|(?:dx\.)?doi\.org/)", re.I)
+
+
+def normalize_doi(doi: object) -> str | None:
+    if not doi:
+        return None
+    s = re.sub(r"\s+", "", str(doi).strip())     # DOIs never contain spaces
+    s = _DOI_PREFIX.sub("", s).rstrip(".").lower()
+    return s or None
+
+
 def content_signature(fields: dict, authors: list[dict]) -> str:
     """A hash of the record's *full* normalized content -- the import-time
     dedup key for references with no DOI.
@@ -397,6 +413,9 @@ def insert_reference(conn: sqlite3.Connection, fields: dict, authors: list[dict]
     exact full-content signature for references with no DOI at all -- so
     re-importing the same library twice updates in place rather than
     duplicating, while never silently merging two genuinely distinct works."""
+    # canonicalise the DOI once, up front, so it is stored, matched, and written
+    # into the CSL JSON in one consistent form regardless of how the source wrote it
+    fields = {**fields, "doi": normalize_doi(fields.get("doi"))}
     sig = content_signature(fields, authors)
     existing_id = find_by_doi(conn, fields.get("doi")) or \
         find_by_content_signature(conn, sig)

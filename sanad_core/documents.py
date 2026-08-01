@@ -101,9 +101,13 @@ def find_duplicate_groups(conn: sqlite3.Connection) -> list[dict]:
         """SELECT id, title, doi, content_sig, created_at
              FROM reference ORDER BY created_at, id"""
     ).fetchall()
+    from .importer import normalize_doi
     groups: dict[str, list] = {}
     for r in rows:
-        doi = (r["doi"] or "").strip().lower()
+        # normalise the DOI so the same DOI written different ways (bare vs a
+        # doi.org URL vs "doi:"-prefixed, any case) groups together -- this also
+        # catches libraries imported before DOIs were canonicalised at store time
+        doi = normalize_doi(r["doi"])
         key = f"doi:{doi}" if doi else (f"sig:{r['content_sig']}" if r["content_sig"] else None)
         if key is None:
             continue  # nothing to dedupe on -- treat as unique
@@ -162,6 +166,17 @@ def deduplicate_library(conn: sqlite3.Connection) -> dict:
     conn.executemany("DELETE FROM reference_author WHERE reference_id = ?",
                      [(r,) for r in removed_ids])
     conn.executemany("DELETE FROM reference WHERE id = ?", [(r,) for r in removed_ids])
+
+    # 4) canonicalise the DOI on each kept row, so a library imported before
+    # DOIs were normalised at store time doesn't keep re-accumulating the same
+    # duplicate on every future import (the keeper now matches new imports too)
+    from .importer import normalize_doi
+    for g in dupes:
+        row = conn.execute("SELECT doi FROM reference WHERE id = ?", (g["keep"],)).fetchone()
+        if row is not None:
+            canon = normalize_doi(row["doi"])
+            if canon and canon != row["doi"]:
+                conn.execute("UPDATE reference SET doi = ? WHERE id = ?", (canon, g["keep"]))
     conn.commit()
     return {"removed": len(removed_ids), "groups": len(dupes),
             "library_size": count_library(conn)}
