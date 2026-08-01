@@ -187,6 +187,9 @@ def apply_profile_to_docx(data: bytes, profile: dict) -> dict:
     margin_cm = ds.get("margin_cm") if ds.get("enabled") else None
     binding_cm = ds.get("binding_margin_cm") if ds.get("enabled") else None
     binding_side = (ds.get("binding_side") or "left").lower()
+    # a landscape page (e.g. a wide table) is bound on a different physical edge:
+    # rotated into a portrait book, its binding edge becomes the bottom
+    binding_side_landscape = (ds.get("binding_side_landscape") or "bottom").lower()
     indent_cm = ps.get("bibliography_hanging_indent_cm")
     caption = ds.get("caption") or {}
     applied: list[str] = []
@@ -221,11 +224,18 @@ def apply_profile_to_docx(data: bytes, profile: dict) -> dict:
                 section.left_margin = section.right_margin = Cm(float(margin_cm))
             applied.append(f"Margins → {margin_cm} cm")
         if binding_cm:
-            attr = {"left": "left_margin", "right": "right_margin",
-                    "top": "top_margin", "bottom": "bottom_margin"}.get(binding_side, "left_margin")
+            from docx.enum.section import WD_ORIENT
+            attr_of = {"left": "left_margin", "right": "right_margin",
+                       "top": "top_margin", "bottom": "bottom_margin"}
+            saw_landscape = False
             for section in doc.sections:
-                setattr(section, attr, Cm(float(binding_cm)))
-            applied.append(f"Binding margin ({binding_side}) → {binding_cm} cm")
+                is_land = section.orientation == WD_ORIENT.LANDSCAPE
+                saw_landscape = saw_landscape or is_land
+                side = binding_side_landscape if is_land else binding_side
+                setattr(section, attr_of.get(side, "left_margin"), Cm(float(binding_cm)))
+            note = f"Binding margin → {binding_cm} cm ({binding_side}"
+            note += f"; {binding_side_landscape} on landscape pages)" if saw_landscape else ")"
+            applied.append(note)
 
         # Word Styles gallery: Title / Heading 1-3 fonts + sizes, and the
         # standard 1 / 1.1 / 1.1.1 multilevel numbering when requested

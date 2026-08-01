@@ -470,9 +470,13 @@ function openStyleBuilder(prefill) {
       </div>
       <div class="grid2">
         <div class="field-row"><label>Binding margin (cm) — optional</label><input class="inp" id="spBindMargin" type="number" step="0.01" placeholder="e.g. 3.81 (1.5 in)"/></div>
-        <div class="field-row"><label>Binding side</label><select class="sel" id="spBindSide"><option value="left">Left</option><option value="right">Right</option><option value="top">Top</option><option value="bottom">Bottom</option></select></div>
+        <div class="field-row"><label>Binding side (portrait)</label><select class="sel" id="spBindSide"><option value="left">Left</option><option value="right">Right</option><option value="top">Top</option><option value="bottom">Bottom</option></select></div>
       </div>
-      <p class="sp-hint">Leave binding margin blank for equal margins all round. Set it (e.g. 3.81 cm = 1.5″) for the bound edge while the others stay at the page margin above.</p>
+      <div class="grid2">
+        <div class="field-row"><label>Binding side (landscape pages)</label><select class="sel" id="spBindSideLand"><option value="bottom">Bottom</option><option value="top">Top</option><option value="left">Left</option><option value="right">Right</option></select></div>
+        <div class="field-row"></div>
+      </div>
+      <p class="sp-hint">Leave binding margin blank for equal margins all round. Set it (e.g. 3.81 cm = 1.5″) for the bound edge; the other sides keep the page margin above. Landscape pages (wide tables) are bound on a different edge — bottom by default — and are handled automatically.</p>
       <label class="check"><input type="checkbox" id="spAmp"/> Use the word “and” in text instead of “&amp;”</label>
       <div class="sp-section-h">Headings (Word Styles gallery)</div>
       <p class="sp-hint">Fonts &amp; sizes for Title and Heading 1–3, applied when you format a thesis. Your heading text is never changed — only the style.</p>
@@ -544,6 +548,7 @@ function openStyleBuilder(prefill) {
       h2_font: txt("#spH2Font"), h2_size_pt: num("#spH2Size"),
       h3_font: txt("#spH3Font"), h3_size_pt: num("#spH3Size"),
       binding_margin_cm: num("#spBindMargin"), binding_side: g("#spBindSide").value || "left",
+      binding_side_landscape: g("#spBindSideLand").value || "bottom",
       caption_font: txt("#spCapFont"), caption_size_pt: num("#spCapSize"),
       caption_italic: g("#spCapItalic").checked ? true : null,
     });

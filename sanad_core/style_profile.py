@@ -127,6 +127,7 @@ def build_profile(form: dict) -> dict:
         ds["enabled"] = True
         ds["binding_margin_cm"] = float(form["binding_margin_cm"])
         ds["binding_side"] = (form.get("binding_side") or "left").lower()
+        ds["binding_side_landscape"] = (form.get("binding_side_landscape") or "bottom").lower()
         p["document_structure"] = ds
 
     # caption style (figures/tables): font, size, italic — applied to Word's

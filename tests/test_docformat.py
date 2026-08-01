@@ -217,3 +217,22 @@ def test_headings_numbered_creates_numbering_part_when_absent():
     from docx.oxml.ns import qn
     ppr = d.styles["Heading 1"].element.find(qn("w:pPr"))
     assert ppr is not None and ppr.find(qn("w:numPr")) is not None
+
+
+def test_binding_margin_is_orientation_aware():
+    from docx import Document
+    from docx.enum.section import WD_ORIENT, WD_SECTION
+    import io as _io
+    d = Document()
+    d.add_heading("Ch1", level=1)
+    sec = d.add_section(WD_SECTION.NEW_PAGE); sec.orientation = WD_ORIENT.LANDSCAPE
+    w, h = sec.page_height, sec.page_width; sec.page_width, sec.page_height = w, h
+    d.add_heading("Wide", level=1)
+    buf = _io.BytesIO(); d.save(buf)
+    prof = {"document_structure": {"enabled": True, "margin_cm": 2.54,
+            "binding_margin_cm": 3.81, "binding_side": "left", "binding_side_landscape": "bottom"}}
+    r = docformat.apply_profile_to_docx(buf.getvalue(), prof)
+    d2 = Document(io.BytesIO(r["data"]))
+    port, land = d2.sections[0], d2.sections[1]
+    assert abs(port.left_margin.cm - 3.81) < 0.02 and abs(port.bottom_margin.cm - 2.54) < 0.02
+    assert abs(land.bottom_margin.cm - 3.81) < 0.02 and abs(land.left_margin.cm - 2.54) < 0.02
