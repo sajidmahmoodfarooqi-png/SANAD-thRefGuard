@@ -181,3 +181,39 @@ def test_api_format_missing_profile_is_400(client):
     data = base64.b64encode(_thesis_docx()).decode()
     r = client.post("/v1/documents/format", json={"data_b64": data})
     assert r.status_code == 400
+
+
+def test_binding_margin_and_caption_style():
+    from docx import Document
+    from docx.shared import Cm, Pt
+    import io as _io
+    doc = Document()
+    doc.add_heading("H", level=1); doc.add_paragraph("body")
+    doc.add_paragraph("Figure 1.", style="Caption")
+    buf = _io.BytesIO(); doc.save(buf)
+    prof = {"paragraph_style": {"font_family": "Georgia", "font_size_pt": 12},
+            "document_structure": {"enabled": True, "margin_cm": 2.54,
+                "binding_margin_cm": 3.81, "binding_side": "left",
+                "caption": {"size_pt": 10, "italic": True}}}
+    r = docformat.apply_profile_to_docx(buf.getvalue(), prof)
+    d = Document(io.BytesIO(r["data"]))
+    s = d.sections[0]
+    assert abs(s.left_margin.cm - 3.81) < 0.02 and abs(s.right_margin.cm - 2.54) < 0.02
+    cs = d.styles["Caption"]
+    assert cs.font.size == Pt(10) and cs.font.italic is True
+    assert docformat.text_fingerprint(r["data"]) == docformat.text_fingerprint(buf.getvalue())
+
+
+def test_headings_numbered_creates_numbering_part_when_absent():
+    from docx import Document
+    import io as _io
+    doc = Document()            # fresh doc: no numbering part at all
+    doc.add_heading("Intro", level=1)
+    buf = _io.BytesIO(); doc.save(buf)
+    prof = {"document_structure": {"enabled": True, "headings": {"numbered": True}}}
+    r = docformat.apply_profile_to_docx(buf.getvalue(), prof)
+    assert any("Heading numbering →" in a for a in r["applied"])   # applied, not skipped
+    d = Document(io.BytesIO(r["data"]))
+    from docx.oxml.ns import qn
+    ppr = d.styles["Heading 1"].element.find(qn("w:pPr"))
+    assert ppr is not None and ppr.find(qn("w:numPr")) is not None

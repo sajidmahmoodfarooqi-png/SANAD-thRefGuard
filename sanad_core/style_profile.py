@@ -119,6 +119,32 @@ def build_profile(form: dict) -> dict:
                 headings[k] = spec
         ds["headings"] = headings
         p["document_structure"] = ds
+
+    # binding/gutter margin: a larger margin on the binding edge (default left),
+    # for thesis binding (e.g. 1 inch all round, 1.5 inch on the binding side).
+    if form.get("binding_margin_cm") is not None:
+        ds = p.get("document_structure") or {}
+        ds["enabled"] = True
+        ds["binding_margin_cm"] = float(form["binding_margin_cm"])
+        ds["binding_side"] = (form.get("binding_side") or "left").lower()
+        p["document_structure"] = ds
+
+    # caption style (figures/tables): font, size, italic — applied to Word's
+    # built-in Caption style. Placement (below figures, above tables) is set when
+    # the caption is inserted in Word.
+    if form.get("caption_font") or form.get("caption_size_pt") is not None \
+            or form.get("caption_italic") is not None:
+        ds = p.get("document_structure") or {}
+        ds["enabled"] = True
+        cap = ds.get("caption") or {}
+        if form.get("caption_font"):
+            cap["font"] = form["caption_font"]
+        if form.get("caption_size_pt") is not None:
+            cap["size_pt"] = float(form["caption_size_pt"])
+        if form.get("caption_italic") is not None:
+            cap["italic"] = bool(form["caption_italic"])
+        ds["caption"] = cap
+        p["document_structure"] = ds
     return p
 
 

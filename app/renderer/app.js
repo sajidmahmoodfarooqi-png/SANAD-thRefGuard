@@ -233,11 +233,13 @@ async function showProfile(id) {
       ${ps.bibliography_hanging_indent_cm != null ? row("Hanging indent", ps.bibliography_hanging_indent_cm + " cm") : ""}
       ${ps.font_family ? row("Reference font", ps.font_family + (ps.font_size_pt ? " " + ps.font_size_pt : "")) : ""}
       ${ds.margin_cm != null ? row("Page margin", ds.margin_cm + " cm") : ""}
+      ${ds.binding_margin_cm != null ? row("Binding margin", ds.binding_margin_cm + " cm (" + (ds.binding_side || "left") + ")") : ""}
       ${hspec(hd.title) ? row("Title style", hspec(hd.title)) : ""}
       ${hspec(hd.h1) ? row("Heading 1", hspec(hd.h1)) : ""}
       ${hspec(hd.h2) ? row("Heading 2", hspec(hd.h2)) : ""}
       ${hspec(hd.h3) ? row("Heading 3", hspec(hd.h3)) : ""}
       ${hd.numbered ? row("Heading numbering", "1 / 1.1 / 1.1.1 (automatic)") : ""}
+      ${(ds.caption && (ds.caption.font || ds.caption.size_pt != null || ds.caption.italic)) ? row("Caption style", [ds.caption.font, ds.caption.size_pt != null ? ds.caption.size_pt + " pt" : "", ds.caption.italic ? "italic" : ""].filter(Boolean).join(" · ")) : ""}
       <div style="display:flex;gap:8px;margin-top:20px">
         <button class="btn" id="profRename">Rename…</button>
         <button class="btn danger" id="profDelete">Delete</button>
@@ -466,6 +468,11 @@ function openStyleBuilder(prefill) {
         <div class="field-row"><label>Reference hanging indent (cm)</label><input class="inp" id="spIndent" type="number" step="0.01" value="${esc(val("hanging_indent_cm", 1.27))}"/></div>
         <div class="field-row"><label>“et al.” from (authors)</label><input class="inp" id="spEtal" type="number" min="1" value="3"/></div>
       </div>
+      <div class="grid2">
+        <div class="field-row"><label>Binding margin (cm) — optional</label><input class="inp" id="spBindMargin" type="number" step="0.01" placeholder="e.g. 3.81 (1.5 in)"/></div>
+        <div class="field-row"><label>Binding side</label><select class="sel" id="spBindSide"><option value="left">Left</option><option value="right">Right</option><option value="top">Top</option><option value="bottom">Bottom</option></select></div>
+      </div>
+      <p class="sp-hint">Leave binding margin blank for equal margins all round. Set it (e.g. 3.81 cm = 1.5″) for the bound edge while the others stay at the page margin above.</p>
       <label class="check"><input type="checkbox" id="spAmp"/> Use the word “and” in text instead of “&amp;”</label>
       <div class="sp-section-h">Headings (Word Styles gallery)</div>
       <p class="sp-hint">Fonts &amp; sizes for Title and Heading 1–3, applied when you format a thesis. Your heading text is never changed — only the style.</p>
@@ -486,6 +493,13 @@ function openStyleBuilder(prefill) {
         <div class="field-row"><label>Heading 3 size (pt)</label><input class="inp" id="spH3Size" type="number" step="0.5" value="${esc(val("h3_size_pt", ""))}" placeholder="e.g. 12"/></div>
       </div>
       <label class="check"><input type="checkbox" id="spNumber"/> Number headings automatically — <b>1</b>, <b>1.1</b>, <b>1.1.1</b> (Word’s standard multilevel scheme)</label>
+      <div class="sp-section-h">Captions (figures &amp; tables)</div>
+      <p class="sp-hint">Sets how Word’s Caption style looks. Insert captions in Word (References → Insert Caption) — <b>below</b> figures/graphs, <b>above</b> tables; this styles them.</p>
+      <div class="grid2">
+        <div class="field-row"><label>Caption font</label><input class="inp" id="spCapFont" placeholder="(same as body)"/></div>
+        <div class="field-row"><label>Caption size (pt)</label><input class="inp" id="spCapSize" type="number" step="0.5" placeholder="e.g. 10"/></div>
+      </div>
+      <label class="check"><input type="checkbox" id="spCapItalic"/> Italic captions</label>
     </div>
     <div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn primary" id="spGo">${pf._detected ? "Save profile" : "Create profile"}</button></div>`);
   // searchable style picker over the full bundled CSL catalog
@@ -529,6 +543,9 @@ function openStyleBuilder(prefill) {
       h1_font: txt("#spH1Font"), h1_size_pt: num("#spH1Size"),
       h2_font: txt("#spH2Font"), h2_size_pt: num("#spH2Size"),
       h3_font: txt("#spH3Font"), h3_size_pt: num("#spH3Size"),
+      binding_margin_cm: num("#spBindMargin"), binding_side: g("#spBindSide").value || "left",
+      caption_font: txt("#spCapFont"), caption_size_pt: num("#spCapSize"),
+      caption_italic: g("#spCapItalic").checked ? true : null,
     });
     try {
       await api("/v1/style-profiles/build", { method: "POST", body: JSON.stringify(form) });

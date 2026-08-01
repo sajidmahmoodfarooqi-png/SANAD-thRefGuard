@@ -1,5 +1,26 @@
 # Release notes
 
+## v0.2.2 — thesis formatting: numbering fix, binding margin, captions
+
+All verified by rendering the formatted `.docx` to PDF (LibreOffice renders the
+same OOXML Word does), not just by inspecting the file.
+
+- **Heading numbering now actually works.** On a document created fresh in Word
+  (no lists), numbering was silently skipped because the file had no "numbering
+  part"; and where it did apply, a heading could appear to drift onto the end of
+  the previous line. Fixed: the formatter now creates a numbering part when
+  absent and uses Word's own canonical `Heading 1/2/3` multilevel scheme
+  (`1` / `1.1` / `1.1.1`), each heading on its own line.
+- **Binding (gutter) margin.** Set a larger margin on the binding edge (default
+  left) for thesis binding — e.g. 1″ all round with 1.5″ on the left — while the
+  other sides keep the page margin.
+- **Caption style.** Set the font, size, and italic/regular of Word's Caption
+  style (for figures and tables). Placement — below figures/graphs, above tables
+  — is chosen when you insert the caption in Word; this styles how it looks.
+- Reminder: heading numbering requires your headings to use Word's **Heading 1 /
+  2 / 3** styles; if your document already has a Multilevel List applied, clear it
+  (Home → Multilevel List → None) so it doesn't show through.
+
 ## v0.2.1 — near-duplicate detection
 
 Point fix on top of v0.2.0.

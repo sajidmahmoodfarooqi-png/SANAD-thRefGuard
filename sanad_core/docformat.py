@@ -141,6 +141,38 @@ def _apply_headings(doc, headings, body_font, applied):
             applied.append(f"Heading numbering: skipped ({exc.__class__.__name__})")
 
 
+def _apply_caption(doc, caption, applied):
+    """Style Word's built-in Caption style (used for figure/table captions):
+    font, size, and italic/regular. We only style *how* a caption looks — we
+    never insert captions or move them, so no prose is touched. Word decides
+    placement (below a figure, above a table) when the caption is inserted."""
+    from docx.shared import Pt
+
+    if not caption or not (caption.get("font") or caption.get("size_pt") is not None
+                           or caption.get("italic") is not None):
+        return
+    try:
+        style = doc.styles["Caption"]
+    except KeyError:
+        applied.append("Caption style: skipped (document has no 'Caption' style yet — "
+                       "insert one caption in Word first, then reformat)")
+        return
+    if caption.get("font"):
+        style.font.name = caption["font"]
+    if caption.get("size_pt") is not None:
+        style.font.size = Pt(float(caption["size_pt"]))
+    if caption.get("italic") is not None:
+        style.font.italic = bool(caption["italic"])
+    bits = []
+    if caption.get("font"):
+        bits.append(caption["font"])
+    if caption.get("size_pt") is not None:
+        bits.append(f"{caption['size_pt']} pt")
+    if caption.get("italic"):
+        bits.append("italic")
+    applied.append("Caption style → " + (", ".join(bits) or "updated"))
+
+
 def apply_profile_to_docx(data: bytes, profile: dict) -> dict:
     """Reformat the .docx to the profile. Returns {data (bytes), applied (list)}.
     Raises ValueError on a non-.docx or corrupt file. Never touches prose."""
@@ -153,7 +185,10 @@ def apply_profile_to_docx(data: bytes, profile: dict) -> dict:
     size = ps.get("font_size_pt")
     spacing = ps.get("line_spacing")
     margin_cm = ds.get("margin_cm") if ds.get("enabled") else None
+    binding_cm = ds.get("binding_margin_cm") if ds.get("enabled") else None
+    binding_side = (ds.get("binding_side") or "left").lower()
     indent_cm = ps.get("bibliography_hanging_indent_cm")
+    caption = ds.get("caption") or {}
     applied: list[str] = []
 
     with offline.no_network():          # the document cannot leave the machine
@@ -177,16 +212,29 @@ def apply_profile_to_docx(data: bytes, profile: dict) -> dict:
             normal.paragraph_format.line_spacing = float(spacing)
             applied.append(f"Line spacing → {spacing}")
 
-        # page margins on every section
+        # page margins on every section. A larger binding-side (gutter) margin is
+        # applied on top for thesis binding — e.g. 1 inch all round, 1.5 inch on
+        # the left (binding) edge.
         if margin_cm:
             for section in doc.sections:
                 section.top_margin = section.bottom_margin = Cm(float(margin_cm))
                 section.left_margin = section.right_margin = Cm(float(margin_cm))
             applied.append(f"Margins → {margin_cm} cm")
+        if binding_cm:
+            attr = {"left": "left_margin", "right": "right_margin",
+                    "top": "top_margin", "bottom": "bottom_margin"}.get(binding_side, "left_margin")
+            for section in doc.sections:
+                setattr(section, attr, Cm(float(binding_cm)))
+            applied.append(f"Binding margin ({binding_side}) → {binding_cm} cm")
 
         # Word Styles gallery: Title / Heading 1-3 fonts + sizes, and the
         # standard 1 / 1.1 / 1.1.1 multilevel numbering when requested
         _apply_headings(doc, ds.get("headings") or {}, font, applied)
+
+        # caption style (for figures/tables): style the built-in Caption style.
+        # Placement (figures below, tables above) is chosen when you insert the
+        # caption in Word — this only sets how captions *look*.
+        _apply_caption(doc, caption, applied)
 
         # reference list hanging indent: apply to the built-in Bibliography style
         # if the document uses it (positive left indent + equal negative first line)
