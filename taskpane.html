@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SANAD</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <link rel="stylesheet" href="taskpane.css" />
+</head>
+<body>
+  <header class="tp-head">
+    <span class="mk" aria-hidden="true">
+      <svg viewBox="0 0 48 48" width="20" height="20"><g fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 11 H12 V37 H19" stroke="var(--ink)" stroke-width="3.4"/>
+        <path d="M29 11 H36 V37 H29" stroke="var(--ink)" stroke-width="3.4"/>
+        <path d="M16.5 24.5 L22 30 L32 17.5" stroke="var(--jade)" stroke-width="4.4"/></g></svg>
+    </span>
+    <span class="wm">SANAD</span>
+    <span class="status" id="status"><i></i> connecting…</span>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab on" data-tab="insert">Insert</button>
+    <button class="tab" data-tab="biblio">Reference list</button>
+    <button class="tab" data-tab="integrity">Integrity</button>
+    <button class="tab" data-tab="connect">Connect</button>
+  </nav>
+
+  <section class="tab-body" id="insert">
+    <div class="search"><input id="q" type="search" placeholder="Search your library" /></div>
+    <div class="results" id="results"><p class="muted">Type to search your local library, then insert a citation at the cursor.</p></div>
+  </section>
+
+  <section class="tab-body" id="biblio" hidden>
+    <p class="muted">Rebuilds the reference list from every SANAD citation in this document, in your chosen style. Place your cursor where the list should go (or leave the existing one and it updates in place).</p>
+    <button class="btn primary" id="biblioBtn">Insert / update reference list</button>
+    <div class="flags" id="biblioMsg"></div>
+  </section>
+
+  <section class="tab-body" id="integrity" hidden>
+    <button class="btn primary" id="scanBtn">Check this document</button>
+    <div class="flags" id="flags"><p class="muted">Runs SANAD's Tier-A + Tier-B checks over every citation in this document.</p></div>
+  </section>
+
+  <section class="tab-body" id="connect" hidden>
+    <p class="muted">The SANAD desktop app must be running. Paste its session token once (Settings in the desktop app, or the <code>sanad.token</code> file next to your library). It's stored with this document only.</p>
+    <div class="search"><input id="token" type="password" placeholder="Paste SANAD token" /></div>
+    <button class="btn primary" id="saveTokenBtn">Connect</button>
+    <div class="flags" id="connectMsg"></div>
+  </section>
+
+  <footer class="tp-foot">
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+    SANAD only writes its own citation and reference-list fields — never your words.
+  </footer>
+
+  <script src="taskpane.js"></script>
+</body>
+</html>
