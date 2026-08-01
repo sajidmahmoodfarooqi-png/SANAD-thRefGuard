@@ -246,3 +246,49 @@ def test_detection_catches_preexisting_rawdoi_duplicates():
     kept = conn.execute("SELECT doi FROM reference").fetchall()
     assert len(kept) == 1
     assert kept[0]["doi"] == "10.5/x"                       # keeper canonicalised
+
+
+# --- near-duplicate detection: same title + year, DOI on one copy only ------ #
+
+def _raw_ref(conn, rid, title, year, doi, sig, created, authors=0):
+    conn.execute("INSERT INTO reference (id,item_type,title,year,doi,content_sig,"
+                 "created_at,updated_at,csl_json) VALUES (?,?,?,?,?,?,?,?,?)",
+                 (rid, "article-journal", title, year, doi, sig, created, created, "{}"))
+    for i in range(authors):
+        aid = f"{rid}-a{i}"
+        conn.execute("INSERT INTO author (id,family,given) VALUES (?,?,?)", (aid, f"Fam{i}", "X"))
+        conn.execute("INSERT INTO reference_author (reference_id,author_id,position) "
+                     "VALUES (?,?,?)", (rid, aid, i))
+    conn.commit()
+
+
+def test_near_duplicate_same_title_year_is_detected_keeping_richest():
+    from sanad_core import documents
+    conn = db.connect()
+    # full record (DOI + 3 authors) vs a bare re-entry (no DOI, no authors),
+    # titles differ only by case/markup -> must pair, keeping the full one
+    _raw_ref(conn, "full", "Mesoscale Eddy Detection From <scp>SST</scp> Maps", 2024,
+             "10.1109/x", "sigA", "2024-01-02", authors=3)
+    _raw_ref(conn, "bare", "Mesoscale eddy detection from sst maps", 2024,
+             None, "sigB", "2024-01-01", authors=0)
+    groups = documents.find_duplicate_groups(conn)
+    assert sum(len(g["remove"]) for g in groups) == 1
+    g = groups[0]
+    assert g["keep"] == "full" and g["remove"] == ["bare"]   # richer copy kept
+
+
+def test_conflicting_dois_same_title_year_are_left_alone():
+    from sanad_core import documents
+    conn = db.connect()
+    # same title+year but two DIFFERENT DOIs -> genuinely distinct (e.g. erratum)
+    _raw_ref(conn, "a", "A shared exact title", 2024, "10.1/aaa", "s1", "2024-01-01")
+    _raw_ref(conn, "b", "A shared exact title", 2024, "10.2/bbb", "s2", "2024-01-02")
+    assert documents.find_duplicate_groups(conn) == []       # not merged
+
+
+def test_same_title_different_year_is_not_a_duplicate():
+    from sanad_core import documents
+    conn = db.connect()
+    _raw_ref(conn, "y1", "Annual survey of the field", 2023, None, "s1", "2024-01-01")
+    _raw_ref(conn, "y2", "Annual survey of the field", 2024, None, "s2", "2024-01-02")
+    assert documents.find_duplicate_groups(conn) == []       # different years -> distinct

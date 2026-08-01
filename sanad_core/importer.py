@@ -371,6 +371,18 @@ def normalize_doi(doi: object) -> str | None:
     return s or None
 
 
+def normalize_title(title: object) -> str:
+    """A title reduced to its bare word content -- lower-cased, markup tags
+    (e.g. ``<scp>MODIS</scp>``) removed, punctuation dropped, whitespace
+    collapsed. Two records for the same paper that differ only in casing,
+    stray commas, or publisher markup normalise to the same string, which lets
+    the duplicate detector pair a full record (with a DOI + authors) against a
+    bare re-entry of the same work (title + year only)."""
+    t = re.sub(r"<[^>]+>", " ", str(title or "").lower())
+    t = re.sub(r"[^a-z0-9]+", " ", t)
+    return re.sub(r"\s+", " ", t).strip()
+
+
 def content_signature(fields: dict, authors: list[dict]) -> str:
     """A hash of the record's *full* normalized content -- the import-time
     dedup key for references with no DOI.

@@ -93,33 +93,82 @@ def _rows_to_refs(conn: sqlite3.Connection, rows) -> list[dict]:
     return out
 
 
+def _pick_keeper(members: list, author_count: dict) -> object:
+    """Choose which copy of a duplicate group to keep: the *richest* record --
+    one with a DOI beats one without, then more authors wins, and an earlier
+    import breaks any remaining tie. This matters for near-duplicates, where one
+    copy is a full record (DOI + authors) and the other a bare re-entry: we keep
+    the full one. ``members`` must already be ordered earliest-first, so a strict
+    ``>`` comparison naturally keeps the earliest on a tie."""
+    from .importer import normalize_doi
+    best, best_key = None, None
+    for m in members:
+        key = (1 if normalize_doi(m["doi"]) else 0, author_count.get(m["id"], 0))
+        if best is None or key > best_key:
+            best, best_key = m, key
+    return best
+
+
 def find_duplicate_groups(conn: sqlite3.Connection) -> list[dict]:
-    """Groups of references that are exact duplicates of one another -- same DOI
-    (case-insensitive) or, failing a DOI, the same full-content signature. Each
-    group lists the canonical keeper (earliest imported) plus the extra copies."""
+    """Groups of references that are duplicates of one another. Two passes:
+
+    1. **Exact** -- same DOI (normalised: bare vs doi.org URL vs "doi:"-prefixed,
+       any case) or, failing a DOI, the same full-content signature. This is what
+       re-importing the same library twice produces.
+    2. **Near-duplicate** -- the same normalised title *and* year, for records not
+       already grouped above. This catches the common case of one paper entered
+       twice: a full record (DOI + authors + metadata) and a bare re-entry (title
+       + year only). A group spanning two *different* DOIs is skipped -- that
+       signals genuinely distinct works (e.g. an erratum), left for human review.
+
+    Each group names the canonical keeper (the richest copy) plus the extras."""
+    from .importer import normalize_doi, normalize_title
     rows = conn.execute(
-        """SELECT id, title, doi, content_sig, created_at
+        """SELECT id, title, year, doi, content_sig, created_at
              FROM reference ORDER BY created_at, id"""
     ).fetchall()
-    from .importer import normalize_doi
-    groups: dict[str, list] = {}
+    author_count = {
+        r["reference_id"]: r["c"] for r in conn.execute(
+            "SELECT reference_id, COUNT(*) c FROM reference_author GROUP BY reference_id")
+    }
+    assigned: set = set()
+    out: list = []
+
+    # pass 1 -- exact: normalised DOI, else full-content signature
+    exact: dict[str, list] = {}
     for r in rows:
-        # normalise the DOI so the same DOI written different ways (bare vs a
-        # doi.org URL vs "doi:"-prefixed, any case) groups together -- this also
-        # catches libraries imported before DOIs were canonicalised at store time
         doi = normalize_doi(r["doi"])
         key = f"doi:{doi}" if doi else (f"sig:{r['content_sig']}" if r["content_sig"] else None)
         if key is None:
-            continue  # nothing to dedupe on -- treat as unique
-        groups.setdefault(key, []).append(r)
-    out = []
-    for members in groups.values():
+            continue
+        exact.setdefault(key, []).append(r)
+    for members in exact.values():
         if len(members) > 1:
-            out.append({
-                "keep": members[0]["id"],
-                "title": members[0]["title"],
-                "remove": [m["id"] for m in members[1:]],
-            })
+            keep = _pick_keeper(members, author_count)
+            out.append({"keep": keep["id"], "title": keep["title"],
+                        "remove": [m["id"] for m in members if m["id"] != keep["id"]]})
+            assigned.update(m["id"] for m in members)
+
+    # pass 2 -- near-duplicate: same normalised title + year, not already grouped
+    near: dict[tuple, list] = {}
+    for r in rows:
+        if r["id"] in assigned:
+            continue
+        nt = normalize_title(r["title"])
+        if not nt or r["year"] is None:
+            continue  # need a real title and a year to pair confidently
+        near.setdefault((nt, r["year"]), []).append(r)
+    for members in near.values():
+        if len(members) < 2:
+            continue
+        dois = {normalize_doi(m["doi"]) for m in members}
+        dois.discard(None)
+        if len(dois) > 1:
+            continue  # conflicting DOIs -> genuinely different works; leave for review
+        keep = _pick_keeper(members, author_count)
+        out.append({"keep": keep["id"], "title": keep["title"],
+                    "remove": [m["id"] for m in members if m["id"] != keep["id"]]})
+        assigned.update(m["id"] for m in members)
     return out
 
 

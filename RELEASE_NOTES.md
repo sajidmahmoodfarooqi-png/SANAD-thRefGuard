@@ -1,5 +1,18 @@
 # Release notes
 
+## v0.2.1 — near-duplicate detection
+
+Point fix on top of v0.2.0.
+
+- **Catches "same paper, entered twice" duplicates.** Real reference lists often
+  hold one full record (DOI + authors + metadata) *and* a bare re-entry of the
+  same work (title + year only, no DOI). These differ enough that exact matching
+  missed them. The duplicate detector now also pairs records by **normalised
+  title + year**, keeping the most complete copy and repointing any citations to
+  it — while still refusing to merge two records that carry **different DOIs**
+  (a genuine erratum/version, left for you to review). The *Remove duplicates*
+  button now appears for these.
+
 ## v0.2.0 — thesis formatting, the Word add-in, and integrity fixes
 
 Builds on v0.1.0 with the two things that make SANAD usable end-to-end inside

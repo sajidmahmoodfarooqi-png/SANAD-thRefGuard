@@ -166,7 +166,7 @@ function openDedupe() {
     if (!n) { toast("No duplicates found"); return; }
     openModal(`
       <div class="modal-h"><h3>Remove duplicates</h3><button class="modal-x" data-close>&times;</button></div>
-      <div class="modal-b"><p style="font-size:13.5px;line-height:1.6">Found <b>${n}</b> duplicate reference${n === 1 ? "" : "s"} across ${d.groups} group${d.groups === 1 ? "" : "s"} — copies of works you already have (matched by DOI, or by an exact title/author/year/venue match).</p>
+      <div class="modal-b"><p style="font-size:13.5px;line-height:1.6">Found <b>${n}</b> duplicate reference${n === 1 ? "" : "s"} across ${d.groups} group${d.groups === 1 ? "" : "s"} — copies of works you already have. Matched by DOI, by an exact content match, or by the same title and year (e.g. a full record with a DOI alongside a bare re-entry of the same paper). The most complete copy is kept.</p>
       <p style="font-size:13.5px;line-height:1.6">SANAD keeps one copy of each and removes the extras. Any citations already pointing at a removed copy are repointed to the one that's kept, so nothing breaks. This can't be undone.</p></div>
       <div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn primary" id="dedupeGo">Remove ${n} duplicate${n === 1 ? "" : "s"}</button></div>`);
     modalEl.querySelector("#dedupeGo").addEventListener("click", async () => {
