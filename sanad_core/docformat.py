@@ -36,24 +36,61 @@ def text_fingerprint(data: bytes) -> list[str]:
     return out
 
 
+def _ensure_numbering_part(doc):
+    """Return the document's <w:numbering> element, creating the numbering part
+    if it has none. A document that never contained a list has no numbering.xml
+    at all, and python-docx will not create one for you (NumberingPart.new()
+    raises NotImplementedError) — so a clean thesis got NO heading numbers. We
+    build a minimal numbering part and attach it. Still only a *definition*; it
+    never writes prose."""
+    from docx.oxml import parse_xml
+    from docx.oxml.ns import nsdecls
+
+    doc_part = doc.part
+    try:
+        return doc_part.numbering_part.element
+    except (NotImplementedError, KeyError):
+        pass
+    from docx.opc.packuri import PackURI
+    from docx.opc.constants import CONTENT_TYPE as CT, RELATIONSHIP_TYPE as RT
+    from docx.parts.numbering import NumberingPart
+
+    element = parse_xml(f'<w:numbering {nsdecls("w")}/>')
+    part = NumberingPart(PackURI("/word/numbering.xml"), CT.WML_NUMBERING,
+                         element, doc_part.package)
+    doc_part.relate_to(part, RT.NUMBERING)
+    return element
+
+
 def _add_multilevel_numbering(doc):
-    """Inject a Word multilevel list (1 / 1.1 / 1.1.1) into the document's
-    numbering part and return its numId. Word has no high-level API for this, so
-    it is raw OOXML — but it only adds a numbering *definition*, never any text."""
+    """Inject Word's canonical heading multilevel list (1 / 1.1 / 1.1.1) into the
+    numbering part and return its numId. Each level names its heading style via
+    <w:pStyle> — exactly how Word's own 'Multilevel List → Heading' scheme is
+    built — which is what makes the numbers actually render (and render on the
+    heading's own line). Raw OOXML, but only a numbering *definition*: no text."""
     from docx.oxml import parse_xml
     from docx.oxml.ns import qn, nsdecls
+    import secrets
 
-    numbering = doc.part.numbering_part.element
+    numbering = _ensure_numbering_part(doc)
     aids = [int(e.get(qn("w:abstractNumId"))) for e in numbering.findall(qn("w:abstractNum"))]
     nids = [int(e.get(qn("w:numId"))) for e in numbering.findall(qn("w:num"))]
     aid = (max(aids) + 1) if aids else 0
     nid = (max(nids) + 1) if nids else 1
     lvls = ""
-    for i, fmt in enumerate(("%1", "%1.%2", "%1.%2.%3")):  # Heading 1/2/3 = 1 / 1.1 / 1.1.1
-        lvls += (f'<w:lvl w:ilvl="{i}"><w:start w:val="1"/><w:numFmt w:val="decimal"/>'
+    # (ilvl, heading style id, level text). Heading 1/2/3 -> 1 / 1.1 / 1.1.1
+    for ilvl, pstyle, fmt in ((0, "Heading1", "%1"), (1, "Heading2", "%1.%2"),
+                              (2, "Heading3", "%1.%2.%3")):
+        # element order matters (CT_Lvl schema sequence): start, numFmt, pStyle,
+        # suff, lvlText, lvlJc, pPr. suff=space avoids the tab-stop that made a
+        # heading appear to "drift" to the end of the previous line.
+        lvls += (f'<w:lvl w:ilvl="{ilvl}">'
+                 f'<w:start w:val="1"/><w:numFmt w:val="decimal"/>'
+                 f'<w:pStyle w:val="{pstyle}"/><w:suff w:val="space"/>'
                  f'<w:lvlText w:val="{fmt}"/><w:lvlJc w:val="left"/>'
-                 f'<w:pPr><w:ind w:left="0" w:hanging="0"/></w:pPr></w:lvl>')
+                 f'<w:pPr><w:ind w:left="0" w:firstLine="0"/></w:pPr></w:lvl>')
     abs_el = parse_xml(f'<w:abstractNum {nsdecls("w")} w:abstractNumId="{aid}">'
+                       f'<w:nsid w:val="{secrets.token_hex(4).upper()}"/>'
                        f'<w:multiLevelType w:val="multilevel"/>{lvls}</w:abstractNum>')
     num_el = parse_xml(f'<w:num {nsdecls("w")} w:numId="{nid}"><w:abstractNumId w:val="{aid}"/></w:num>')
     first_num = numbering.find(qn("w:num"))
@@ -100,8 +137,8 @@ def _apply_headings(doc, headings, body_font, applied):
                 if name in [s.name for s in doc.styles]:
                     _link_heading_numbering(doc, name, ilvl, nid)
             applied.append("Heading numbering → 1 / 1.1 / 1.1.1 (Heading 1/2/3)")
-        except Exception:  # numbering is best-effort; never fail the whole reformat
-            applied.append("Heading numbering: skipped (document has no numbering part)")
+        except Exception as exc:  # numbering is best-effort; never fail the whole reformat
+            applied.append(f"Heading numbering: skipped ({exc.__class__.__name__})")
 
 
 def apply_profile_to_docx(data: bytes, profile: dict) -> dict:
