@@ -676,6 +676,17 @@ function renderFlags(scan) {
 }
 $("demoScanBtn").addEventListener("click", runDemoScan);
 
+// open the complete offline guide (shipped with the app) in the system browser
+$("openGuideBtn")?.addEventListener("click", async () => {
+  try {
+    const r = await window.sanadShell?.openGuide?.();
+    if (!r) throw new Error("unavailable");
+    if (!r.ok) throw new Error(r.error || "couldn't open the guide");
+  } catch (e) {
+    toast("Couldn't open the guide: " + (e.message || e));
+  }
+});
+
 // --- boot ------------------------------------------------------------------ //
 pollHealth();
 setInterval(pollHealth, 5000);

@@ -6,7 +6,7 @@
 // quit. The renderer talks to the Core over http://127.0.0.1:23890 directly; the
 // main process only supervises it.
 
-const { app, BrowserWindow, shell } = require("electron");
+const { app, BrowserWindow, shell, ipcMain } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 const crypto = require("crypto");
@@ -23,6 +23,19 @@ const DEV_ROOT = path.join(__dirname, "..");
 
 let coreProc = null;
 let win = null;
+
+// The complete offline guide ships as a real file (extraResources when packaged,
+// docs/ in dev). Opening it via shell.openPath hands it to the OS default browser,
+// so a user can read or print the full manual without any network access.
+function guidePath() {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, "SANAD-Guide.html")
+    : path.join(DEV_ROOT, "docs", "SANAD-Guide.html");
+}
+ipcMain.handle("sanad:open-guide", async () => {
+  const err = await shell.openPath(guidePath());   // "" on success
+  return { ok: !err, error: err || null };
+});
 
 function coreLaunch() {
   // packaged: the frozen Core binary shipped in resources/core/. dev: system Python.

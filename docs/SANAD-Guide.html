@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>SANAD the RefGuard — Complete Guide</title>
+<style>
+  :root{
+    --bg:#f7f4ec; --card:#fffdf8; --text:#20242b; --muted:#5f5b4f; --faint:#8a8474;
+    --hair:#e2dccb; --accent:#8a6d3b; --accent-ink:#5c4622; --code:#eee8d8; --ok:#3f7d4e;
+    --warn:#9a6a2c; --danger:#9a3b32;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#12151c; --card:#171b24; --text:#e7e3d7; --muted:#a29d8f; --faint:#726d60;
+      --hair:#28303c; --accent:#c8a86a; --accent-ink:#e6d4ac; --code:#1e242e; --ok:#6cc083;
+      --warn:#d6a75e; --danger:#e08079;
+    }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px;display:grid;
+    grid-template-columns:236px 1fr;gap:40px;}
+  header.top{grid-column:1 / -1;padding:40px 0 8px;border-bottom:1px solid var(--hair);
+    display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
+  header.top h1{font-size:26px;margin:0;letter-spacing:.3px}
+  header.top .tag{color:var(--muted);font-size:15px}
+  .badge{margin-left:auto;font-size:12px;color:var(--faint);border:1px solid var(--hair);
+    padding:3px 9px;border-radius:20px}
+  nav.toc{position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto;
+    padding:28px 0;font-size:13.5px;}
+  nav.toc a{display:block;color:var(--muted);text-decoration:none;padding:4px 10px;
+    border-left:2px solid transparent;border-radius:0 4px 4px 0;}
+  nav.toc a:hover{color:var(--text);background:var(--card)}
+  nav.toc a.sub{padding-left:22px;font-size:12.5px;color:var(--faint)}
+  nav.toc .grp{margin-top:14px;color:var(--faint);font-size:11px;text-transform:uppercase;
+    letter-spacing:.8px;padding:0 10px}
+  main{padding:14px 0 90px;min-width:0}
+  section{margin:0 0 42px;scroll-margin-top:20px}
+  h2{font-size:21px;margin:34px 0 12px;padding-top:10px;color:var(--text)}
+  h3{font-size:16.5px;margin:24px 0 8px}
+  h2 .n{color:var(--accent);font-weight:700;margin-right:8px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0;padding-left:22px}
+  li{margin:6px 0}
+  a{color:var(--accent-ink)}
+  code,.mono{font-family:"SF Mono",ui-monospace,Consolas,"Roboto Mono",monospace;
+    background:var(--code);padding:1.5px 6px;border-radius:5px;font-size:13.5px}
+  pre{background:var(--code);padding:14px 16px;border-radius:9px;overflow:auto;
+    font-family:"SF Mono",ui-monospace,Consolas,monospace;font-size:13px;line-height:1.5}
+  .card{background:var(--card);border:1px solid var(--hair);border-radius:12px;
+    padding:16px 20px;margin:16px 0}
+  .lede{font-size:17px;color:var(--muted)}
+  .promise{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:18px 0}
+  .promise .card{margin:0}
+  .promise b{display:block;margin-bottom:4px}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14.5px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+  th{color:var(--faint);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  td b{color:var(--text)}
+  .rule td:first-child{white-space:nowrap;color:var(--accent-ink);font-weight:600}
+  .callout{border-left:3px solid var(--accent);background:var(--card);
+    padding:12px 16px;border-radius:0 9px 9px 0;margin:16px 0}
+  .callout.ok{border-color:var(--ok)} .callout.warn{border-color:var(--warn)}
+  .k{color:var(--accent-ink);font-weight:600}
+  .num-demo{font-family:"SF Mono",ui-monospace,Consolas,monospace;background:var(--code);
+    border-radius:9px;padding:14px 18px;margin:14px 0;font-size:14px;line-height:2}
+  .num-demo .i1{padding-left:0}.num-demo .i2{padding-left:26px}.num-demo .i3{padding-left:52px}
+  .num-demo .lbl{color:var(--faint);font-size:12px}
+  footer{grid-column:1 / -1;border-top:1px solid var(--hair);padding:22px 0 60px;
+    color:var(--faint);font-size:13px}
+  @media (max-width:820px){
+    .wrap{grid-template-columns:1fr;gap:0}
+    nav.toc{position:static;max-height:none;padding:10px 0 20px;
+      border-bottom:1px solid var(--hair);columns:2}
+    .promise{grid-template-columns:1fr}
+  }
+  @media print{
+    nav.toc{display:none} .wrap{grid-template-columns:1fr;max-width:none}
+    body{background:#fff;color:#000} .card,.callout,pre,code{background:#f4f4f4}
+    a{color:#000;text-decoration:none} .badge{display:none}
+    section{break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>SANAD <span class="tag">the RefGuard</span></h1>
+    <span class="tag">Complete guide &amp; how-to</span>
+    <span class="badge">Local-first · offline · AGPLv3</span>
+  </header>
+
+  <nav class="toc">
+    <div class="grp">Start here</div>
+    <a href="#what">1 · What SANAD is</a>
+    <a href="#install">2 · Install &amp; first run</a>
+    <a href="#tour">3 · The screens</a>
+    <div class="grp">Your work</div>
+    <a href="#library">4 · Building your library</a>
+    <a href="#profiles">5 · Style profiles</a>
+    <a href="#headings" class="sub">Word Styles gallery</a>
+    <a href="#format">6 · Format your thesis</a>
+    <a href="#addin">7 · The Word add-in</a>
+    <a href="#integrity">8 · The integrity check</a>
+    <div class="grp">Reference</div>
+    <a href="#privacy">9 · Privacy &amp; data</a>
+    <a href="#trouble">10 · Troubleshooting</a>
+    <a href="#license">11 · Licence &amp; credits</a>
+  </nav>
+
+  <main>
+    <section id="what">
+      <h2><span class="n">1</span>What SANAD is</h2>
+      <p class="lede">SANAD is a citation-integrity companion for anyone writing a thesis, dissertation,
+      or paper in Microsoft Word or LibreOffice. It does one thing that ordinary reference managers
+      don't: it checks that every citation is <em>right</em> — the right source, cited in the right
+      place — not merely formatted correctly. And it does all of it on your own machine.</p>
+      <div class="promise">
+        <div class="card"><b>It checks meaning, not just format</b>Beyond "does this look like APA?",
+          SANAD asks "is this the correct source, and does it belong in this sentence?"</div>
+        <div class="card"><b>It formats to <em>your</em> handbook</b>Build a style profile from your
+          university's rules — citation style, fonts, margins, headings — not a generic preset.</div>
+        <div class="card"><b>It never touches your prose</b>SANAD only ever writes inside its own
+          citation and reference fields. Your sentences are guaranteed untouched — enforced in code.</div>
+      </div>
+      <p>Everything runs locally. There is no account, no cloud, and no telemetry; your library is a
+      single file on your computer, and the engine makes no outbound network connections.</p>
+    </section>
+
+    <section id="install">
+      <h2><span class="n">2</span>Install &amp; first run</h2>
+      <ol>
+        <li>Run the installer for your platform (Windows <span class="mono">.exe</span>,
+          macOS <span class="mono">.dmg</span>, or Linux <span class="mono">AppImage</span>) and launch SANAD.</li>
+        <li>On first launch the app starts its local engine (the "Core"). A status light in the app
+          turns <span class="k">green</span> when the Core is ready — this usually takes a second or two.</li>
+        <li>You're ready. Nothing to sign into. Open <b>Library → Add source</b> and either paste a few
+          references or choose <b>Load a small sample set</b> to explore.</li>
+      </ol>
+      <div class="callout"><b>What gets installed.</b> SANAD is fully self-contained — the engine and
+      everything it needs ship inside the app. Your library lives in your user data folder and stays
+      there when you update or uninstall.</div>
+    </section>
+
+    <section id="tour">
+      <h2><span class="n">3</span>The screens</h2>
+      <table>
+        <tr><td><b>Library</b></td><td>Your references. Search, page through, import, and de-duplicate.</td></tr>
+        <tr><td><b>Style profiles</b></td><td>Your formatting rules — citation style, fonts, margins,
+          reference-list indent, and heading styles. Build one per handbook.</td></tr>
+        <tr><td><b>Format</b></td><td>Apply a style profile to a thesis <span class="mono">.docx</span> —
+          the "format my thesis" pass. Never changes your text.</td></tr>
+        <tr><td><b>Integrity</b></td><td>Run the citation checks and review each finding.</td></tr>
+        <tr><td><b>Help</b></td><td>The in-app quick reference, and a button to open this full guide.</td></tr>
+        <tr><td><b>Settings</b></td><td>The engine's session token (for connecting the Word add-in) and app info.</td></tr>
+      </table>
+    </section>
+
+    <section id="library">
+      <h2><span class="n">4</span>Building your library</h2>
+      <p>Your library is the set of sources SANAD checks against. Fill it however suits you:</p>
+      <ul>
+        <li><b>Paste RIS or BibTeX</b> — both export from Zotero, Mendeley, EndNote, and every other
+          reference manager. Open <b>Library → Add source</b>, choose the format, and paste.</li>
+        <li><b>Drop a list file</b> — a well-formatted reference list as <b>Excel (.xlsx)</b>,
+          <b>CSV</b>, or <b>Word (.docx)</b> can be imported directly.</li>
+        <li><b>Typed list</b> — paste a plain numbered list of references and SANAD parses it.</li>
+      </ul>
+      <h3>De-duplication (rule R6)</h3>
+      <p>SANAD stores everything locally and de-duplicates safely. Re-importing the same reference
+      collapses to a single entry, but two genuinely different works are <em>never</em> silently
+      merged — likely duplicates are flagged for you to review. If you accidentally import a file
+      twice, open <b>Library → De-duplicate</b> to collapse the extras.</p>
+      <h3>Optional DOI look-up (Crossref)</h3>
+      <p>SANAD can enrich a reference from its DOI using the public Crossref service. This is the one
+      feature that reaches the internet, so it is <b>off by default</b> and only ever runs when you
+      explicitly ask for it on a specific reference. With it off, SANAD is completely offline.</p>
+    </section>
+
+    <section id="profiles">
+      <h2><span class="n">5</span>Style profiles</h2>
+      <p>A <b>style profile</b> captures your target format. Instead of a generic "APA", you build a
+      profile that matches your <b>university's thesis handbook</b>. Go to
+      <b>Style profiles → New profile</b> and set:</p>
+      <table>
+        <tr><td><b>Base style</b></td><td>The citation style everything derives from — search 10,000+
+          styles (APA, MLA, Chicago, Harvard, IEEE, Vancouver, or a specific journal).</td></tr>
+        <tr><td><b>"et al." from</b></td><td>How many authors before the list is shortened.</td></tr>
+        <tr><td><b>Ampersand in text</b></td><td>Use the word "and" instead of "&amp;".</td></tr>
+        <tr><td><b>Reference font</b></td><td>Font family and size for the bibliography.</td></tr>
+        <tr><td><b>Hanging indent</b></td><td>The reference-list indent, in centimetres.</td></tr>
+        <tr><td><b>Page margin</b></td><td>The document margin, in centimetres.</td></tr>
+        <tr><td><b>Line spacing</b></td><td>Single, 1.5, or double.</td></tr>
+      </table>
+      <p>A profile is a small, shareable file. Save it once and apply it to any document.</p>
+
+      <h3 id="headings">Headings — Word's Styles gallery</h3>
+      <p>A profile can also carry your <b>heading styles</b>, mapped onto Word's own Styles gallery:
+      <b>Title</b> and <b>Heading&nbsp;1–3</b>. For each level you set a <b>font</b> and a <b>size</b>;
+      leave a heading's font blank to reuse the body font.</p>
+      <p>Turn on <b>"Number headings automatically"</b> and SANAD applies Word's standard multilevel
+      scheme:</p>
+      <div class="num-demo">
+        <div class="i1"><span class="k">1</span>&nbsp;&nbsp;Introduction &nbsp;<span class="lbl">— Heading 1</span></div>
+        <div class="i2"><span class="k">1.1</span>&nbsp;&nbsp;Background &nbsp;<span class="lbl">— Heading 2</span></div>
+        <div class="i3"><span class="k">1.1.1</span>&nbsp;&nbsp;Prior work &nbsp;<span class="lbl">— Heading 3</span></div>
+        <div class="i2"><span class="k">1.2</span>&nbsp;&nbsp;Aims &nbsp;<span class="lbl">— Heading 2</span></div>
+        <div class="i1"><span class="k">2</span>&nbsp;&nbsp;Methods &nbsp;<span class="lbl">— Heading 1</span></div>
+      </div>
+      <p>Because these land on the document's <em>real</em> Word styles, the numbers renumber
+      themselves automatically as you add, remove, or reorder chapters — you never type or maintain a
+      number by hand. And, like everything else here, applying them <b>changes not one word of your
+      heading text</b>: Word renders the numbers, they are never inserted into your prose.</p>
+      <div class="callout ok"><b>Tip.</b> For the numbering to attach, your headings must actually use
+      Word's <b>Heading 1 / 2 / 3</b> styles (the Styles gallery on the Home ribbon), not manually
+      enlarged bold text. If they do, everything just works.</div>
+    </section>
+
+    <section id="format">
+      <h2><span class="n">6</span>Format your thesis</h2>
+      <p>The <b>Format</b> screen takes your finished <span class="mono">.docx</span> and a style
+      profile, and returns the same document reformatted to that profile — body font, size and line
+      spacing; page margins; Title and Heading 1–3 fonts, sizes and numbering; and a hanging indent on
+      the reference list.</p>
+      <ol>
+        <li>Open <b>Format</b>, pick a style profile, and drop or choose your document.</li>
+        <li>SANAD reformats it and gives you the new file, listing exactly what it changed.</li>
+      </ol>
+      <div class="callout warn"><b>The reference-list indent needs one thing from you.</b> The hanging
+      indent is applied to Word's built-in <b>Bibliography</b> style. If your reference list uses that
+      style, the indent lands automatically; if not, SANAD tells you so rather than guessing which
+      paragraphs are references.</div>
+      <div class="callout ok"><b>The guarantee, restated.</b> This whole pass only ever writes
+      <em>style and format</em> properties — never paragraph text. SANAD fingerprints every word before
+      and after and refuses to save if a single character of prose would change. It also runs with the
+      network sealed off, so your document cannot leave the machine while being processed.</div>
+    </section>
+
+    <section id="addin">
+      <h2><span class="n">7</span>The Word add-in</h2>
+      <p>The desktop app manages your library, profiles, and formatting. To insert citations and run
+      checks <em>inside</em> your document, use the <b>SANAD task pane</b> in Word. It is a thin client:
+      it talks only to your local Core and writes only inside its own tagged fields — never your prose.</p>
+      <h3>Connect it</h3>
+      <ol>
+        <li>Keep the SANAD desktop app running (it hosts the Core).</li>
+        <li>Copy the <b>session token</b> from the desktop app's <b>Settings</b> screen.</li>
+        <li>In Word's task pane, open <b>Connect</b>, paste the token, and click Connect. The status
+          goes green.</li>
+      </ol>
+      <h3>Use it</h3>
+      <ul>
+        <li><b>Insert</b> — search your library and drop a citation at the cursor (wrapped in SANAD's
+          own <span class="mono">sanad-cite</span> field).</li>
+        <li><b>Reference list</b> — rebuild the whole bibliography from the document's citations, in
+          your profile's format, inside the single <span class="mono">sanad-bibliography</span> field.</li>
+        <li><b>Integrity</b> — run the Tier-A and Tier-B checks over every citation in the document.</li>
+      </ul>
+      <div class="callout"><b>Installing the pane.</b> The task-pane files are hosted on a web address
+      (the project's GitHub Pages site or your own HTTPS host) and loaded into Word via its manifest —
+      <em>only the pane's interface</em> comes from the web. Your document never leaves your machine:
+      the pane talks solely to the local Core on <span class="mono">127.0.0.1</span>. See the
+      project's <span class="mono">connectors/word</span> README for the exact sideload steps.</div>
+    </section>
+
+    <section id="integrity">
+      <h2><span class="n">8</span>The integrity check</h2>
+      <p>This is what makes SANAD different. After a citation <em>looks</em> right, SANAD checks whether
+      it <em>is</em> right. Every finding is a card with a severity, a plain-English explanation, and
+      actions — <b>nothing is ever changed automatically</b>. Press <b>Run a demo check</b> on the
+      Integrity screen to see it work on a sample.</p>
+      <table>
+        <thead><tr><th>Rule</th><th>What it catches</th><th>What to do</th></tr></thead>
+        <tbody class="rule">
+          <tr><td>R1 — Year mismatch</td><td>The year you typed doesn't match the source in your library.</td><td>Pick the correct year.</td></tr>
+          <tr><td>R2 — Venue looks wrong</td><td>A book resolved to a <em>review of</em> the book, not the book itself.</td><td>Re-resolve or replace the source.</td></tr>
+          <tr><td>R3 — Orphaned citation</td><td>A citation points to a source no longer in your library.</td><td>Relink it, or remove it.</td></tr>
+          <tr><td>R4 — Cited not listed</td><td>A source in a grouped citation would drop out of the reference list.</td><td>Restore the missing source.</td></tr>
+          <tr><td>R5 — Listed not cited</td><td>A reference sits in the list but nothing cites it.</td><td>Cite it, or remove it.</td></tr>
+          <tr><td>R6 — Possible duplicate</td><td>Two library entries look like the same work.</td><td>Merge, or keep both.</td></tr>
+          <tr><td>R7 — Ambiguous author/year</td><td>Two sources share author + year with no a/b suffix.</td><td>Add a/b suffixes.</td></tr>
+          <tr><td>R8 — Cited out of context</td><td>The sentence is about one topic but cites an unrelated source — a closer one may be in your library.</td><td>Review the suggestion. <em>SANAD suggests, you decide.</em></td></tr>
+        </tbody>
+      </table>
+      <p><b>R8</b> is the semantic check. If the optional language model is available it compares meaning
+      (catching paraphrases); if not, it falls back to a lighter word-overlap check — still useful, just
+      less sensitive. Either way, R8 only ever <em>suggests</em>.</p>
+    </section>
+
+    <section id="privacy">
+      <h2><span class="n">9</span>Privacy &amp; your data</h2>
+      <ul>
+        <li><b>Everything is local.</b> Your library is a single file on your machine.</li>
+        <li><b>No network egress.</b> The engine listens only on <span class="mono">127.0.0.1</span> and
+          makes no outbound connections — except the DOI look-up in §4, which is off unless you turn it on.</li>
+        <li><b>No account, no cloud, no telemetry.</b> Nothing about your work is collected or sent anywhere.</li>
+        <li><b>A per-launch token</b> guards the engine, so no other program or web page on your computer
+          can reach your library.</li>
+      </ul>
+    </section>
+
+    <section id="trouble">
+      <h2><span class="n">10</span>Troubleshooting</h2>
+      <table>
+        <tr><td><b>Status light is red</b></td><td>The engine didn't start — quit and reopen SANAD. If it
+          persists, another program may be using port <span class="mono">23890</span>.</td></tr>
+        <tr><td><b>Import did nothing</b></td><td>Check the chosen format matches what you pasted
+          (RIS vs BibTeX). A plain numbered list should use <b>Typed list</b>.</td></tr>
+        <tr><td><b>Doubled references</b></td><td>You likely imported a file twice — open
+          <b>Library → De-duplicate</b>.</td></tr>
+        <tr><td><b>Heading numbers didn't appear</b></td><td>Your headings must use Word's real
+          <b>Heading 1/2/3</b> styles for numbering to attach (§5).</td></tr>
+        <tr><td><b>Reference indent skipped</b></td><td>Apply Word's <b>Bibliography</b> style to your
+          reference list, then reformat (§6).</td></tr>
+        <tr><td><b>Add-in won't connect</b></td><td>Make sure the desktop app is running, and re-copy the
+          current session token from <b>Settings</b> (it changes each launch).</td></tr>
+        <tr><td><b>R8 says "semantic check: off"</b></td><td>The optional semantic model isn't installed,
+          so a lighter word-overlap check was used. This is expected and fine.</td></tr>
+      </table>
+    </section>
+
+    <section id="license">
+      <h2><span class="n">11</span>Licence &amp; credits</h2>
+      <p>SANAD the RefGuard is free and open-source software, released under the
+      <b>GNU Affero General Public License v3.0 or later (AGPLv3)</b>. You are free to use, study,
+      share, and modify it; derivatives and hosted versions must remain open under the same licence.</p>
+      <p>Built to be honest about citations: it tells you what it found and lets you decide. It never
+      edits your writing, and it keeps your work on your own machine.</p>
+    </section>
+
+    <footer>
+      SANAD the RefGuard — Complete guide. This document is included with the software and works fully
+      offline. Print it (Ctrl/Cmd&nbsp;+&nbsp;P) for a paper copy. © the SANAD project · AGPLv3.
+    </footer>
+  </main>
+</div>
+</body>
+</html>

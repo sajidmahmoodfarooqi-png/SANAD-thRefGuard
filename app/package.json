@@ -18,7 +18,8 @@
     "productName": "SANAD",
     "files": ["main.js", "preload.js", "renderer/**/*"],
     "extraResources": [
-      { "from": "../packaging/dist", "to": "core" }
+      { "from": "../packaging/dist", "to": "core" },
+      { "from": "../docs/SANAD-Guide.html", "to": "SANAD-Guide.html" }
     ],
     "win": { "icon": "../assets/branding/sanad-icon.ico", "target": ["nsis"] },
     "mac": { "icon": "../assets/branding/sanad-icon.icns", "target": ["dmg"], "category": "public.app-category.productivity" },

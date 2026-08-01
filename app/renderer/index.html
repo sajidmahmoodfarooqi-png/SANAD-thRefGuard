@@ -179,6 +179,9 @@
             <h4>Importing references</h4>
             <p>Use <b>RIS</b> or <b>BibTeX</b> (both export from any reference manager), or a plain numbered <b>Typed list</b>. SANAD stores everything locally and de-duplicates safely: re-importing the same reference collapses to one entry, but two genuinely different works are never silently merged — likely duplicates are flagged for you to review (rule R6).</p>
 
+            <h4>Style profiles &amp; formatting your thesis</h4>
+            <p>A <b>style profile</b> matches your university's handbook — base citation style, "et al." threshold, ampersand, reference font, hanging indent, page margin and line spacing. It also carries your <b>heading styles</b> (Word's Styles gallery): a font and size for <b>Title</b> and <b>Heading 1–3</b>, and an optional switch to <b>number headings automatically</b> in Word's standard scheme — Heading 1 → <b>1</b>, Heading 2 → <b>1.1</b>, Heading 3 → <b>1.1.1</b>. On the <b>Format</b> screen, apply a profile to your <span class="mono">.docx</span>: SANAD reformats body text, margins, headings and the reference list — the numbers renumber themselves as you add chapters — and <b>never changes a word of your prose</b> (headings included; Word renders the numbers, they're never typed in).</p>
+
             <h4>What the integrity check catches</h4>
             <p>After a citation <em>looks</em> right, SANAD checks whether it <em>is</em> right. Every finding explains itself and offers actions; nothing is ever changed automatically. Press <b>Run a demo check</b> on the Integrity screen to see it work.</p>
             <table class="help-table">
@@ -207,7 +210,11 @@
               <li><b>Import did nothing.</b> Check the format matches what you pasted; a plain numbered list should use <b>Typed list</b>.</li>
               <li><b>R8 says "semantic check: off".</b> The optional semantic model isn't installed, so SANAD used a lighter word-overlap check — still useful, just less sensitive to paraphrases.</li>
             </ul>
-            <p class="help-foot">Full guide: <span class="mono">docs/USER_GUIDE.md</span> · SANAD is free and open-source (AGPLv3).</p>
+            <div class="help-cta">
+              <button class="btn primary" id="openGuideBtn">Open the full guide</button>
+              <span class="help-foot">Opens the complete illustrated manual (offline) in your browser — printable for a paper copy.</span>
+            </div>
+            <p class="help-foot">SANAD is free and open-source (AGPLv3).</p>
           </div>
         </section>
       </main>
