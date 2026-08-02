@@ -66,6 +66,15 @@ class ImportRequest(BaseModel):
     resolve: bool = False        # opt-in Crossref DOI lookup (off by default)
 
 
+class SearchTitlesRequest(BaseModel):
+    titles: list[str]     # bare paper titles, no DOI/citation formatting needed
+
+
+class AddResolvedRequest(BaseModel):
+    fields: dict
+    authors: list[dict] = []
+
+
 class ScanRequest(BaseModel):
     # all optional: the add-in supplies these from the live document when it
     # can, but a bare `POST /scan` (DB-only reconciliation) is valid too.
@@ -284,6 +293,29 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
         conn.commit()
         count = conn.execute("SELECT COUNT(*) c FROM reference").fetchone()["c"]
         return {"imported": len(ids), "library_size": count, "resolved": resolved}
+
+    @app.post("/v1/library/search-titles")
+    def library_search_titles(req: SearchTitlesRequest):
+        # Build a library from bare titles -- e.g. a researcher's own already-
+        # verified reading list, pasted numbered or one-per-line. This ONLY
+        # searches; nothing is added to the library here. Each query gets back
+        # ranked candidates for the user to pick from (or reject) -- never an
+        # automatic pick, since a title search can surface the wrong paper.
+        titles = [t.strip() for t in req.titles if t.strip()]
+        if len(titles) > 200:
+            raise HTTPException(413, "too many titles in one search (limit 200)")
+        return {"results": [{"query": t, "candidates": resolver.search_by_title(t)}
+                            for t in titles]}
+
+    @app.post("/v1/library/add-resolved")
+    def library_add_resolved(req: AddResolvedRequest, conn=Depends(get_conn)):
+        # Insert exactly the one candidate the user explicitly chose from a
+        # title search. No search or matching happens here -- this only ever
+        # inserts what's handed to it, same as any other import path.
+        rid = importer.insert_reference(conn, req.fields, req.authors)
+        conn.commit()
+        count = conn.execute("SELECT COUNT(*) c FROM reference").fetchone()["c"]
+        return {"added": rid is not None, "id": rid, "library_size": count}
 
     # -- citations ---------------------------------------------------------- #
     @app.post("/v1/citations")

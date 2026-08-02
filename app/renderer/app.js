@@ -544,6 +544,84 @@ function openImport() {
   });
 }
 document.querySelectorAll("[data-action=import]").forEach((b) => b.addEventListener("click", openImport));
+
+// --- build a library from a list of bare titles ----------------------------- //
+// Two explicit steps, never a silent add: (1) search — paste a numbered or
+// plain list of titles, each is looked up on Crossref; (2) review — every
+// title's candidates are shown, the top match pre-selected as a convenience
+// (a researcher's own already-verified reading list usually resolves cleanly),
+// but nothing is added to the library until "Add selected" is clicked.
+function openTitleSearch() {
+  openModal(`
+    <div class="modal-h"><h3>Build from a list of titles</h3><button class="modal-x" data-close>&times;</button></div>
+    <div class="modal-b">
+      <p style="font-size:13px;line-height:1.6;color:var(--muted)">Paste your reading list — numbered or one title per line. Each is searched on Crossref (the only step here that reaches the internet); you'll review and pick the right match for each one before anything is added.</p>
+      <textarea class="ta" id="tsInput" style="min-height:160px" placeholder="1. The Art of Memory&#10;2. A framework for distributed caching&#10;3. ..."></textarea>
+    </div>
+    <div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn primary" id="tsSearchGo">Search</button></div>`);
+  modalEl.querySelector("#tsSearchGo").addEventListener("click", async () => {
+    const lines = modalEl.querySelector("#tsInput").value.split("\n")
+      .map((l) => l.replace(/^\s*\d+[.)]\s*/, "").trim())   // drop "1." / "2)" numbering
+      .filter(Boolean);
+    if (!lines.length) { toast("Paste at least one title"); return; }
+    const btn = modalEl.querySelector("#tsSearchGo");
+    btn.disabled = true; btn.textContent = "Searching…";
+    try {
+      const { results } = await api("/v1/library/search-titles", { method: "POST", body: JSON.stringify({ titles: lines }) });
+      renderTitleSearchResults(results);
+    } catch (e) { toast("Search failed: " + e.message); btn.disabled = false; btn.textContent = "Search"; }
+  });
+}
+$("titleSearchBtn")?.addEventListener("click", openTitleSearch);
+
+function renderTitleSearchResults(results) {
+  const rows = results.map((r, ri) => {
+    if (!r.candidates.length) {
+      return `<div class="ts-row"><div class="ts-q">${esc(r.query)}</div>
+        <div class="ts-none">No match found on Crossref — nothing will be added for this one.</div></div>`;
+    }
+    const opts = r.candidates.map((c, ci) => {
+      const f = c.fields;
+      const label = `${esc(f.title || "(no title)")}${f.year ? ` (${f.year})` : ""}`;
+      const meta = [f.container_title, (c.authors || []).map((a) => a.family).filter(Boolean).join(", "), f.doi]
+        .filter(Boolean).map(esc).join(" · ");
+      return `<label class="ts-cand"><input type="radio" name="ts-${ri}" value="${ci}"${ci === 0 ? " checked" : ""}/>
+        <span><b>${label}</b><br/><span class="ts-meta">${meta}</span></span></label>`;
+    }).join("");
+    return `<div class="ts-row"><div class="ts-q">${esc(r.query)}</div>
+      ${opts}
+      <label class="ts-cand"><input type="radio" name="ts-${ri}" value="skip"/> <span>Skip — none of these are it</span></label>
+    </div>`;
+  }).join("");
+
+  openModal(`
+    <div class="modal-h"><h3>Review matches</h3><button class="modal-x" data-close>&times;</button></div>
+    <div class="modal-b" style="max-height:60vh;overflow:auto">
+      <p style="font-size:13px;color:var(--muted);margin:0 0 12px">The likely match is pre-selected for each title — check it's right, or pick a different candidate, or skip. Nothing is added until you click Add selected.</p>
+      ${rows}
+    </div>
+    <div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn primary" id="tsAddGo">Add selected</button></div>`);
+
+  modalEl.querySelector("#tsAddGo").addEventListener("click", async () => {
+    const btn = modalEl.querySelector("#tsAddGo");
+    btn.disabled = true; btn.textContent = "Adding…";
+    let added = 0, skipped = 0;
+    for (let ri = 0; ri < results.length; ri++) {
+      const picked = modalEl.querySelector(`input[name="ts-${ri}"]:checked`);
+      if (!picked || picked.value === "skip") { skipped++; continue; }
+      const cand = results[ri].candidates[+picked.value];
+      try {
+        const res = await api("/v1/library/add-resolved", { method: "POST",
+          body: JSON.stringify({ fields: cand.fields, authors: cand.authors || [] }) });
+        if (res.added) added++; else skipped++;
+      } catch { skipped++; }
+    }
+    closeModal();
+    toast(`Added ${added}${skipped ? `, skipped ${skipped}` : ""} — library holds ${(await api("/v1/library?limit=1")).total}`);
+    if (!$("library").hidden) loadLibrary();
+  });
+}
+
 // Global guard: in Electron a file dropped anywhere but a handled zone makes the
 // window navigate to that file (blanking the app). Swallow drops outside the zone.
 window.addEventListener("dragover", (e) => e.preventDefault());

@@ -602,3 +602,68 @@ def test_library_health_excludes_entries_already_resolved_by_exact_dedup(client)
     # the exact-duplicate pair must NOT also show up as a "near duplicate" --
     # it's already resolved by the existing Remove-duplicates button
     assert h["near_duplicate_count"] == 0
+
+
+def test_search_titles_returns_candidates_without_adding_anything(client, monkeypatch):
+    from sanad_core import resolver
+    def fake_search(title, fetch=None, rows=5):
+        return [{"fields": {"title": f"Resolved: {title}", "year": 2022, "doi": "10.9/found"},
+                "authors": [{"family": "Diaz", "given": "R."}]}]
+    monkeypatch.setattr(resolver, "search_by_title", fake_search)
+
+    r = client.post("/v1/library/search-titles", json={"titles": ["Some paper", "  ", "Another paper"]})
+    body = r.json()
+    # blank lines are dropped; nothing is inserted just by searching
+    assert [x["query"] for x in body["results"]] == ["Some paper", "Another paper"]
+    assert body["results"][0]["candidates"][0]["fields"]["title"] == "Resolved: Some paper"
+    assert client.get("/v1/library").json()["total"] == 0
+
+
+def test_add_resolved_inserts_exactly_the_chosen_candidate(client):
+    r = client.post("/v1/library/add-resolved", json={
+        "fields": {"title": "A chosen candidate", "year": 2021, "doi": "10.9/chosen"},
+        "authors": [{"family": "Diaz", "given": "R."}]})
+    body = r.json()
+    assert body["added"] is True and body["library_size"] == 1
+    row = client.get("/v1/library").json()["results"][0]
+    assert row["title"] == "A chosen candidate"
+
+
+def test_add_resolved_rejects_malformed_candidate_like_any_other_insert(client):
+    # a bare-DOI/number "title" with no author is rejected here too, same guard
+    r = client.post("/v1/library/add-resolved", json={"fields": {"title": "0078"}, "authors": []})
+    body = r.json()
+    assert body["added"] is False and body["id"] is None
+    assert client.get("/v1/library").json()["total"] == 0
+
+
+def test_search_titles_too_many_is_rejected(client):
+    r = client.post("/v1/library/search-titles", json={"titles": [f"t{i}" for i in range(201)]})
+    assert r.status_code == 413
+
+
+def test_title_search_end_to_end_search_then_pick_then_add(client, monkeypatch):
+    from sanad_core import resolver
+    def fake_search(title, fetch=None, rows=5):
+        if "memory" in title.lower():
+            return [{"fields": {"title": "The Art of Memory", "year": 2001, "doi": "10.5/mem"},
+                    "authors": [{"family": "Fisher", "given": "R. K."}]},
+                   {"fields": {"title": "A totally different paper on memory chips", "year": 2015},
+                    "authors": [{"family": "Wu", "given": "L."}]}]
+        return []   # the second title has no match
+    monkeypatch.setattr(resolver, "search_by_title", fake_search)
+
+    search = client.post("/v1/library/search-titles",
+                         json={"titles": ["1. The Art of Memory", "2. Nothing findable"]}).json()
+    assert search["results"][0]["query"] == "1. The Art of Memory"   # numbering NOT stripped server-side
+    assert len(search["results"][0]["candidates"]) == 2
+    assert search["results"][1]["candidates"] == []
+
+    # user picks the FIRST candidate for title 1, skips title 2 (no candidates anyway)
+    chosen = search["results"][0]["candidates"][0]
+    add = client.post("/v1/library/add-resolved",
+                      json={"fields": chosen["fields"], "authors": chosen["authors"]}).json()
+    assert add["added"] is True and add["library_size"] == 1
+
+    row = client.get("/v1/library").json()["results"][0]
+    assert row["title"] == "The Art of Memory" and row["authors"] == "Fisher"

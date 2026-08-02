@@ -71,3 +71,81 @@ def test_enrich_degrades_gracefully_on_failure():
 
 def test_resolve_by_doi_returns_none_on_empty_message():
     assert resolver.resolve_by_doi("10.1/x", fetch=lambda u, timeout=8.0: {}) is None
+
+
+# --- search_by_title: candidates only, never auto-picks ---------------------- #
+
+_SEARCH_RESPONSE = {
+    "message": {
+        "items": [
+            {
+                "DOI": "10.2000/aaa111",
+                "type": "journal-article",
+                "title": ["Sediment Transport Modelling in Coastal Estuaries"],
+                "container-title": ["Journal of Verified Things"],
+                "issued": {"date-parts": [[2019]]},
+                "author": [{"family": "Alvarez", "given": "T."}],
+            },
+            {
+                "DOI": "10.2000/bbb222",
+                "type": "journal-article",
+                "title": ["Sediment Transport in Coastal Estuaries: A Modelling Approach"],
+                "container-title": ["Journal of Verified Things"],
+                "issued": {"date-parts": [[2020]]},
+                "author": [{"family": "Alvarez", "given": "T."}, {"family": "Kim", "given": "S."}],
+            },
+        ]
+    }
+}
+
+
+def _fetch_search_ok(url, timeout=8.0):
+    assert "query.bibliographic=" in url
+    return _SEARCH_RESPONSE
+
+
+def test_search_by_title_returns_ranked_candidates_never_picks_one():
+    results = resolver.search_by_title("Sediment Transport Modelling Coastal Estuaries",
+                                       fetch=_fetch_search_ok)
+    assert len(results) == 2   # both candidates returned -- caller decides, not this function
+    assert results[0]["fields"]["title"] == "Sediment Transport Modelling in Coastal Estuaries"
+    assert results[0]["fields"]["doi"] == "10.2000/aaa111"
+    assert results[1]["authors"][1]["family"] == "Kim"
+
+
+def test_search_by_title_respects_rows_param_in_the_request():
+    seen = {}
+    def fetch(url, timeout=8.0):
+        seen["url"] = url
+        return _SEARCH_RESPONSE
+    resolver.search_by_title("anything", fetch=fetch, rows=3)
+    assert "rows=3" in seen["url"]
+
+
+def test_search_by_title_empty_query_returns_nothing():
+    assert resolver.search_by_title("", fetch=_fetch_search_ok) == []
+    assert resolver.search_by_title("   ", fetch=_fetch_search_ok) == []
+
+
+def test_search_by_title_degrades_gracefully_on_failure():
+    assert resolver.search_by_title("x", fetch=_fetch_boom) == []
+
+
+def test_search_by_title_handles_missing_items_key():
+    assert resolver.search_by_title("x", fetch=lambda u, timeout=8.0: {"message": {}}) == []
+
+
+def test_crossref_title_strips_html_entity_encoded_markup():
+    # a real shape found via the live Crossref API: a title containing
+    # HTML-entity-encoded tags (not raw <i> -- the literal text is "&lt;i&gt;")
+    msg = {"title": ["Someone's &lt;i&gt;Big Idea&lt;/i&gt; Revisited"],
+           "container-title": ["A &amp; B Journal"]}
+    fields, _ = resolver.crossref_message_to_fields(msg)
+    assert fields["title"] == "Someone's Big Idea Revisited"
+    assert fields["container_title"] == "A & B Journal"
+
+
+def test_crossref_title_strips_raw_tags_too():
+    msg = {"title": ["Plain <i>Raw Tag</i> Title"]}
+    fields, _ = resolver.crossref_message_to_fields(msg)
+    assert fields["title"] == "Plain Raw Tag Title"

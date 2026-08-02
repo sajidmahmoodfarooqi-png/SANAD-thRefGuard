@@ -190,6 +190,13 @@ table.lib tr.sel td { background:color-mix(in srgb, var(--accent) 10%, transpare
 .inp, .sel, .ta { font-family:var(--sans); font-size:13px; color:var(--text); background:var(--elev); border:1px solid var(--hairline); border-radius:8px; padding:8px 11px; outline:none; width:100%; }
 .inp:focus, .sel:focus, .ta:focus { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent); }
 .ta { font-family:var(--mono); font-size:12px; min-height:140px; resize:vertical; line-height:1.5; }
+.ts-row { border:1px solid var(--hairline); border-radius:10px; padding:12px 14px; margin-bottom:12px; }
+.ts-q { font-size:11.5px; color:var(--faint); text-transform:uppercase; letter-spacing:.03em; margin-bottom:8px; }
+.ts-cand { display:flex; align-items:flex-start; gap:9px; padding:6px 4px; border-radius:7px; cursor:pointer; font-size:13.5px; }
+.ts-cand:hover { background:var(--surface-2); }
+.ts-cand input { margin-top:3px; }
+.ts-meta { font-size:11.5px; color:var(--muted); }
+.ts-none { font-size:13px; color:var(--muted); font-style:italic; }
 .seg2 { display:flex; gap:6px; }
 .seg2 button { flex:1; padding:7px; font-size:12.5px; border:1px solid var(--hairline); background:var(--surface-2); color:var(--muted); border-radius:8px; cursor:pointer; }
 .seg2 button.on { background:color-mix(in srgb,var(--accent) 15%,transparent); color:var(--text); border-color:color-mix(in srgb,var(--accent) 40%,transparent); font-weight:600; }

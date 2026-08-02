@@ -1,21 +1,27 @@
 """Opt-in metadata resolution against Crossref.
 
 SANAD is local-first and makes no network calls by default. This module is the
-single, explicit exception: when the user opts in (per import), a reference that
-carries a DOI is looked up on Crossref and its authoritative metadata (title,
-year, journal, authors, volume/issue/pages) is filled in and corrected. It is:
+explicit exception, in two distinct, differently-gated forms:
 
-  * off by default (the caller must pass resolve=True),
-  * DOI-only (no title guessing -- a title query can return the *wrong* paper,
-    exactly the error SANAD exists to catch),
-  * timeout-guarded and fully graceful: any failure leaves the reference as the
-    user supplied it.
+  * `enrich`/`resolve_by_doi` -- a reference that already carries a DOI is
+    looked up and its authoritative metadata is filled in automatically. Safe
+    to apply without asking again per result, because a DOI is exact: there is
+    no "which paper did you mean" ambiguity.
+  * `search_by_title` -- given only a bare title (no DOI), searches Crossref
+    and returns *candidates*, ranked, never a single accepted answer. A title
+    query can return the wrong paper, which is exactly the error SANAD exists
+    to catch -- so this never auto-selects. The caller (the UI) always shows
+    the candidates and requires an explicit human pick before anything is
+    added to the library.
 
-The HTTP fetch is injectable (`fetch=`) so the merge logic is unit-tested with no
+Both are off unless the user explicitly invokes them, timeout-guarded, and
+fully graceful: any failure returns nothing extra rather than raising. The HTTP
+fetch is injectable (`fetch=`) so the merge logic is unit-tested with no
 network.
 """
 from __future__ import annotations
 
+import html
 import json
 import re
 import urllib.parse
@@ -46,14 +52,24 @@ def _default_fetch(url: str, timeout: float = 8.0) -> dict:
         return json.loads(r.read().decode("utf-8"))
 
 
+def _clean_crossref_text(value: str) -> str:
+    """Crossref titles/container-titles/abstracts sometimes carry inline markup
+    -- either raw JATS tags (<i>...</i>) or, in titles especially, HTML-entity-
+    encoded ones (Kuhn's &lt;i&gt;The Structure...&lt;/i&gt; at 60). Decode
+    entities first, THEN strip tags, so both forms end up as plain text -- a
+    real case found while verifying the title-search feature against the live
+    Crossref API, not a hypothetical."""
+    return _JATS_TAG.sub("", html.unescape(value)).strip()
+
+
 def crossref_message_to_fields(msg: dict) -> tuple[dict, list[dict]]:
     """Map a Crossref work `message` object to SANAD fields + authors."""
     fields: dict = {}
     if msg.get("title"):
-        fields["title"] = msg["title"][0]
+        fields["title"] = _clean_crossref_text(msg["title"][0])
     ct = msg.get("container-title") or []
     if ct:
-        fields["container_title"] = ct[0]
+        fields["container_title"] = _clean_crossref_text(ct[0])
     dp = (msg.get("issued") or {}).get("date-parts") or []
     if dp and dp[0] and dp[0][0]:
         fields["year"] = int(dp[0][0])
@@ -63,7 +79,7 @@ def crossref_message_to_fields(msg: dict) -> tuple[dict, list[dict]]:
             fields[dst] = str(msg[src])
     fields["item_type"] = _TYPE_MAP.get(msg.get("type", ""), "article-journal")
     if msg.get("abstract"):
-        fields["abstract"] = _JATS_TAG.sub("", msg["abstract"]).strip()
+        fields["abstract"] = _clean_crossref_text(msg["abstract"])
     authors = [
         {"family": a.get("family", "").strip(), "given": a.get("given", "").strip()}
         for a in (msg.get("author") or [])
@@ -80,6 +96,35 @@ def resolve_by_doi(doi: str, fetch=None) -> tuple[dict, list[dict]] | None:
         return crossref_message_to_fields(msg) if msg else None
     except Exception:
         return None
+
+
+CROSSREF_SEARCH = "https://api.crossref.org/works"
+
+
+def search_by_title(title: str, fetch=None, rows: int = 5) -> list[dict]:
+    """Search Crossref by a bare title (no DOI known yet) and return up to
+    `rows` candidates, each `{"fields": {...}, "authors": [...]}` -- ranked by
+    Crossref's own relevance score, most-likely-match first. Deliberately never
+    picks one: a title query can return a similarly-named but different paper,
+    so the caller must show these to the user and let them choose (or reject
+    all of them) rather than anything here guessing on their behalf. Returns
+    [] on any lookup failure -- never raises."""
+    title = (title or "").strip()
+    if not title:
+        return []
+    fetch = fetch or _default_fetch
+    try:
+        url = f"{CROSSREF_SEARCH}?query.bibliographic={urllib.parse.quote(title)}&rows={int(rows)}"
+        data = fetch(url)
+        items = ((data.get("message") or {}).get("items")) or []
+    except Exception:
+        return []
+    out = []
+    for item in items:
+        fields, authors = crossref_message_to_fields(item)
+        if fields.get("title"):
+            out.append({"fields": fields, "authors": authors})
+    return out
 
 
 def enrich(fields: dict, authors: list[dict], fetch=None) -> tuple[dict, list[dict]]:

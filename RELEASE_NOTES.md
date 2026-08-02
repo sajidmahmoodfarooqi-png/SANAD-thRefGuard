@@ -1,5 +1,16 @@
 # Release notes
 
+## v0.2.6 — build your library from a plain list of titles
+
+- **"Build from titles"** (Library screen) — paste your reading list, numbered
+  or one per line, and each title is searched on Crossref. **Every result is a
+  candidate for you to review, never an automatic pick** — a title search can
+  surface a similarly-named but different paper, so nothing is added to your
+  library until you explicitly choose the right match (or skip it) for each
+  title. The top-ranked candidate is pre-selected as a convenience, since your
+  own already-verified reading list usually resolves cleanly — but you still
+  confirm before anything is added.
+
 ## v0.2.5 — Library Health, boot-stats fix, and closing real gaps found by testing
 
 A pass driven by a real, evidence-based audit of the actually-installed app (not
