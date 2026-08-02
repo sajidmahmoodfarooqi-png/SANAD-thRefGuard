@@ -551,3 +551,51 @@ def test_library_sort_and_delete(client):
     assert "Mango paper" not in titles("title")
     # deleting again is a harmless no-op
     assert client.delete(f"/v1/library/{rid}").json()["deleted"] == 0
+
+
+def test_library_health_reports_missing_doi_malformed_and_near_duplicates(client):
+    # 1) two references with a DOI, one without -> missing_doi == 1
+    client.post("/v1/library/import", json={"format": "ris", "text":
+        "TY  - JOUR\nTI  - Has a DOI\nAU  - A, B\nPY  - 2021\nDO  - 10.1/x\nER  -"})
+    client.post("/v1/library/import", json={"format": "ris", "text":
+        "TY  - JOUR\nTI  - No DOI on file\nAU  - C, D\nPY  - 2021\nER  -"})
+
+    # 2) a malformed bare-DOI "reference" inserted directly (as would exist from
+    #    before the import-time guard existed) -- retroactive detection
+    from sanad_core import db as _db
+    conn = _db.connect(client.app.state.db_path)
+    conn.execute("INSERT INTO reference (id,item_type,title,doi,content_sig,created_at,updated_at) "
+                 "VALUES ('bad1','article-journal','.1109/JSTARS.2024.3402823',NULL,'sigbad',datetime('now'),datetime('now'))")
+    conn.commit(); conn.close()
+
+    # 3) a near-duplicate pair: same normalized title, DIFFERENT year -> not
+    #    caught by the exact/same-year dedup pass, must show up as near-duplicate
+    client.post("/v1/library/import", json={"format": "ris", "text":
+        "TY  - JOUR\nTI  - Multi-Function Radar Modeling: A Review\nAU  - Zhao, W\nPY  - 2024\nER  -"})
+    client.post("/v1/library/import", json={"format": "ris", "text":
+        "TY  - JOUR\nTI  - Multi-function Radar modelling: a review\nPY  - 2016\nER  -"})
+
+    h = client.get("/v1/library/health").json()
+    assert h["total"] == 5
+    assert h["missing_doi"] == 4          # 4 of the 5 have no DOI on file
+    assert h["malformed"] == [{"id": "bad1", "title": ".1109/JSTARS.2024.3402823", "year": None}]
+    assert h["exact_duplicate_count"] == 0     # different years -> exact pass doesn't merge
+    assert h["near_duplicate_count"] == 2      # the radar-modeling pair
+    titles = {m["title"] for g in h["near_duplicate_groups"] for m in g["members"]}
+    assert "Multi-Function Radar Modeling: A Review" in titles
+    assert "Multi-function Radar modelling: a review" in titles
+
+
+def test_library_health_excludes_entries_already_resolved_by_exact_dedup(client):
+    client.post("/v1/library/import",
+                json={"format": "ris", "text": "TY  - JOUR\nTI  - Exact dup paper\nAU  - X, Y\nPY  - 2020\nDO  - 10.9/exact\nER  -"})
+    from sanad_core import db as _db
+    conn = _db.connect(client.app.state.db_path)
+    _dup_reference(conn, "exact-dup-1", doi="10.9/EXACT", title="Exact dup paper")
+    conn.close()
+
+    h = client.get("/v1/library/health").json()
+    assert h["exact_duplicate_count"] == 1
+    # the exact-duplicate pair must NOT also show up as a "near duplicate" --
+    # it's already resolved by the existing Remove-duplicates button
+    assert h["near_duplicate_count"] == 0

@@ -1,5 +1,39 @@
 # Release notes
 
+## v0.2.5 — Library Health, boot-stats fix, and closing real gaps found by testing
+
+A pass driven by a real, evidence-based audit of the actually-installed app (not
+just re-running automated tests) — every item below traces to a concrete,
+reproduced problem, not a guess.
+
+### New
+
+- **Library Health** — a new screen (sidebar → Quality → Library health) that
+  surfaces the library's own data-quality issues directly in the app: missing
+  DOIs, malformed import-artifact entries, exact duplicates, and **possible
+  near-duplicates** (titles similar enough to likely be the same work — e.g. a
+  spelling variant like "Modeling"/"modelling", or the same paper filed under
+  two years — that exact matching alone misses). Nothing is ever removed
+  automatically; every entry has its own Delete button. Validated against a
+  real 446-reference library: found all known malformed entries and 40 genuine
+  near-duplicate groups with no false positives spot-checked.
+
+### Fixed
+
+- **Home screen showed "—" for Sources/Style profiles until you visited those
+  tabs.** The dashboard now populates on launch, before you click anything.
+- **Word add-in "can't load the add-in" network error** — traced to
+  `manifest.xml` and `manifest.prod.xml` being easy to confuse (both plausible
+  names, one needs a local dev server). Restructured so the plainly-named
+  `manifest.xml` always points at the real, hosted (GitHub Pages) task pane —
+  no server needed. The dev-only manifest is now clearly named
+  `manifest.dev.xml` and visually labeled "(dev)" in Word's Add-ins list.
+- **Import now rejects malformed bare-DOI/number "references"** at the door —
+  a record whose title is just a stray DOI fragment or number with no author
+  (the root cause of junk entries reaching the library in the first place) is
+  silently skipped rather than imported, on every import path (RIS, BibTeX,
+  typed list, CSV/Excel/Word).
+
 ## v0.2.4 — connect Word in one step (and it stays connected)
 
 **Local by design — your library and your writing never leave your computer.**
@@ -92,7 +126,7 @@ no account, no cloud, no telemetry.
   library, rebuild the whole reference list, and run the integrity check — all
   **inside your document**, writing only inside its own tagged fields. The pane's
   UI is hosted on GitHub Pages; your document never leaves your machine (it talks
-  only to the local Core on `127.0.0.1`). Sideload `connectors/word/manifest.prod.xml`.
+  only to the local Core on `127.0.0.1`). Sideload `connectors/word/manifest.xml`.
 - **Complete offline help guide**, packaged with the app — a printable manual
   opened from the Help screen's *Open the full guide* button, no network needed.
 

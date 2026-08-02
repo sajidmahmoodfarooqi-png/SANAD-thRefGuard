@@ -292,3 +292,51 @@ def test_same_title_different_year_is_not_a_duplicate():
     _raw_ref(conn, "y1", "Annual survey of the field", 2023, None, "s1", "2024-01-01")
     _raw_ref(conn, "y2", "Annual survey of the field", 2024, None, "s2", "2024-01-02")
     assert documents.find_duplicate_groups(conn) == []       # different years -> distinct
+
+
+# --- malformed bare-DOI/number title guard (real cases from a user's library) - #
+
+def test_bare_doi_or_number_titles_with_no_author_are_rejected():
+    conn = db.connect()
+    bad_titles = [
+        ".1109/JSTARS.2024.3402823",
+        ".1007/s11277-018-6024-7",
+        "/10.3390/su14052810",
+        "0078",
+        "512149",
+    ]
+    for t in bad_titles:
+        rid = importer.insert_reference(conn, {"title": t, "year": 2024}, [])
+        assert rid is None, f"expected {t!r} to be rejected"
+    conn.commit()
+    assert conn.execute("SELECT COUNT(*) c FROM reference").fetchone()["c"] == 0
+
+
+def test_legitimate_short_or_numeric_looking_titles_are_not_rejected():
+    conn = db.connect()
+    # a real title never has these shapes rejected: has a space, or has an author
+    rid1 = importer.insert_reference(conn, {"title": "COVID-19 response", "year": 2020}, [])
+    rid2 = importer.insert_reference(conn, {"title": "0078", "year": 2019},
+                                     [{"family": "Smith"}])   # numeric title, but has an author
+    conn.commit()
+    assert rid1 is not None and rid2 is not None
+    assert conn.execute("SELECT COUNT(*) c FROM reference").fetchone()["c"] == 2
+
+
+def test_ris_import_skips_malformed_records_without_failing_the_whole_import():
+    conn = db.connect()
+    ris = """TY  - JOUR
+TI  - .1109/JSTARS.2024.3402823
+PY  - 2024
+ER  -
+
+TY  - JOUR
+TI  - A genuine paper title with real content
+AU  - Real, Author
+PY  - 2023
+ER  -
+"""
+    ids = importer.import_ris_text(conn, ris)
+    assert len(ids) == 1   # the malformed record was skipped, not the whole import
+    row = conn.execute("SELECT title FROM reference").fetchone()
+    assert row["title"] == "A genuine paper title with real content"

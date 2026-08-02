@@ -17,10 +17,20 @@ only inside its own tagged content controls — never your prose:
 - **Integrity** — run SANAD's Tier-A + Tier-B checks over every citation.
 - **Connect** — paste the Core's per-launch session token once.
 
-The bundle (`taskpane.html/.css/.js`, `assets/`, `manifest.xml`) is fully
-self-contained and has a real add-in `<Id>` GUID. It ships pointing at
-`https://localhost:3000` so you can test locally now, then host it by swapping
-that one URL.
+The bundle (`taskpane.html/.css/.js`, `assets/`) is fully self-contained and has
+a real add-in `<Id>` GUID. There are **two manifests, deliberately named so the
+plain one is always safe to pick**:
+
+- **`manifest.xml`** — production. Points at the hosted task pane on GitHub
+  Pages. This is the one to sideload for real use — no local server needed.
+- **`manifest.dev.xml`** — local development only. Points at
+  `https://localhost:3000`; only works while a dev server is running (below).
+  Its `<DisplayName>` is suffixed "(dev)" so it's visually distinguishable from
+  the production one in Word's *My Add-ins* list if both are ever loaded.
+
+Sideloading `manifest.dev.xml` with no dev server running produces Word's
+"can't load the add-in — network/internet" error — if you see that, you likely
+picked the dev manifest by mistake; use plain `manifest.xml` instead.
 
 ### A. Test it locally (fastest — no hosting yet)
 
@@ -31,12 +41,13 @@ that one URL.
    ```bash
    npx office-addin-dev-certs install     # one-time trusted localhost cert
    npx http-server -S -C "$(npx office-addin-dev-certs verify --json | jq -r .localhostCertPath)" \
-     -K "$(...keyPath)" -p 3000 .          # or simply: npx office-addin-debugging start manifest.xml
+     -K "$(...keyPath)" -p 3000 .          # or simply: npm start (runs office-addin-debugging start manifest.dev.xml)
    ```
-   Easiest: `npx office-addin-debugging start manifest.xml` — it installs the
-   cert, serves on :3000, and sideloads into Word for you.
+   Easiest: `npm start` — it installs the cert, serves on :3000, and sideloads
+   `manifest.dev.xml` into Word for you.
 3. **Sideload** (if not automated) — Word → *Insert → Add-ins → My Add-ins →
-   Upload My Add-in* → pick `manifest.xml`.
+   Upload My Add-in* → pick `manifest.dev.xml` for local dev, or plain
+   `manifest.xml` for the real hosted pane (no server needed).
 4. In the pane: open **Connect**, paste the token, click Connect (status should
    go green). Then **Insert** a citation, build the **Reference list**, run
    **Integrity**.
@@ -57,20 +68,20 @@ Pages** → *Source* = **Deploy from a branch** → *Branch* = **`gh-pages`** / 
 (root) → **Save**. The site goes live within a minute; every later push to
 `gh-pages` redeploys it automatically.
 
-**The hosted manifest is already generated** as
-[`word/manifest.prod.xml`](word/manifest.prod.xml) — the same file as
-`manifest.xml` with the one base URL swapped from `https://localhost:3000` to the
-Pages URL above. To regenerate it (e.g. for a different host):
+**`word/manifest.xml`** already points at the Pages URL above — that's the file
+to sideload. (`word/manifest.prod.xml` carries the identical content under an
+explicit name, kept for clarity when scripting a deploy; regenerate either from
+`manifest.dev.xml` for a different host with:
 
 ```bash
 sed 's#https://localhost:3000#https://YOUR-HTTPS-BASE#g' \
-    word/manifest.xml > word/manifest.prod.xml
+    word/manifest.dev.xml > word/manifest.xml
 ```
 
-Sideload `manifest.prod.xml` in Word (same *Upload My Add-in* step), or deploy it
-via your Microsoft 365 admin centre for an organisation. The manifest itself is
-**not** served from the web — Word loads it locally; only the pane's UI
-(`taskpane.html` and friends) is fetched from the Pages URL.
+Sideload `manifest.xml` in Word (*Upload My Add-in*), or deploy it via your
+Microsoft 365 admin centre for an organisation. The manifest itself is **not**
+served from the web — Word loads it locally; only the pane's UI (`taskpane.html`
+and friends) is fetched from the Pages URL.
 
 **Privacy note:** only the task-pane *UI* is served from the host. Your document
 never leaves your machine — the pane talks only to the local Core on

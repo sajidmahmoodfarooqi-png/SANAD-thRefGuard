@@ -420,11 +420,37 @@ def find_by_content_signature(conn: sqlite3.Connection, sig: str) -> str | None:
     return row["id"] if row else None
 
 
-def insert_reference(conn: sqlite3.Connection, fields: dict, authors: list[dict]) -> str:
+# A "reference" whose title is really just a bare DOI/URL fragment or a lone
+# number, with no author -- an import artifact (e.g. a citation-list line that
+# was only a DOI, or a stray page/footnote number), not a real reference.
+# Grounded in 5 real cases found in a user's library: '.1109/JSTARS.2024.3402823',
+# '.1007/s11277-018-6024-7', '/10.3390/su14052810', '0078', '512149'.
+_BARE_DOI_TITLE = re.compile(r"^[./]?\d[\d.]*/[\w.\-]+$")
+_BARE_NUMBER_TITLE = re.compile(r"^\d+$")
+
+
+def looks_like_malformed_bare_reference(title: object, authors: list[dict]) -> bool:
+    if authors:
+        return False   # real author data on file -> never reject, however odd the title
+    t = str(title or "").strip()
+    if not t or " " in t:
+        return False    # a genuine title almost always has a space; a bare
+                         # fragment never does, so this alone avoids false positives
+    return bool(_BARE_DOI_TITLE.match(t) or _BARE_NUMBER_TITLE.match(t))
+
+
+def insert_reference(conn: sqlite3.Connection, fields: dict, authors: list[dict]) -> str | None:
     """Insert one reference + its authors. Dedupes on DOI first, then on an
     exact full-content signature for references with no DOI at all -- so
     re-importing the same library twice updates in place rather than
-    duplicating, while never silently merging two genuinely distinct works."""
+    duplicating, while never silently merging two genuinely distinct works.
+
+    Returns None (inserting nothing) for a malformed bare-DOI/number "title"
+    with no author -- see looks_like_malformed_bare_reference. Callers that
+    loop over many records should skip a None rather than fail the whole
+    import over one bad row."""
+    if looks_like_malformed_bare_reference(fields.get("title"), authors):
+        return None
     # canonicalise the DOI once, up front, so it is stored, matched, and written
     # into the CSL JSON in one consistent form regardless of how the source wrote it
     fields = {**fields, "doi": normalize_doi(fields.get("doi"))}
@@ -486,7 +512,9 @@ def import_ris_text(conn: sqlite3.Connection, text: str) -> list[str]:
     ids = []
     for rec in parse_ris(text):
         fields, authors = ris_record_to_fields(rec)
-        ids.append(insert_reference(conn, fields, authors))
+        rid = insert_reference(conn, fields, authors)
+        if rid is not None:      # None -> malformed bare-DOI/number "reference", skipped
+            ids.append(rid)
     conn.commit()
     return ids
 
@@ -495,7 +523,9 @@ def import_bibtex_text(conn: sqlite3.Connection, text: str) -> list[str]:
     ids = []
     for entry in parse_bibtex(text):
         fields, authors = bibtex_entry_to_fields(entry)
-        ids.append(insert_reference(conn, fields, authors))
+        rid = insert_reference(conn, fields, authors)
+        if rid is not None:
+            ids.append(rid)
     conn.commit()
     return ids
 
@@ -504,6 +534,8 @@ def import_typed_list_text(conn: sqlite3.Connection, text: str) -> list[str]:
     ids = []
     for raw in split_typed_list(text):
         fields, authors = parse_typed_reference(raw)
-        ids.append(insert_reference(conn, fields, authors))
+        rid = insert_reference(conn, fields, authors)
+        if rid is not None:
+            ids.append(rid)
     conn.commit()
     return ids

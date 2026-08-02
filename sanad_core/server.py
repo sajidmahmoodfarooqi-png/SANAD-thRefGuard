@@ -217,6 +217,11 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
         return {"groups": len(groups),
                 "duplicate_count": sum(len(g["remove"]) for g in groups)}
 
+    @app.get("/v1/library/health")
+    def library_health(conn=Depends(get_conn)):
+        # self-diagnosing data-quality snapshot -- see documents.library_health
+        return documents.library_health(conn)
+
     @app.post("/v1/library/deduplicate")
     def library_deduplicate(conn=Depends(get_conn)):
         return documents.deduplicate_library(conn)
@@ -273,7 +278,9 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
                 if new_fields.get("resolution_src") == "crossref":
                     resolved += 1
                 fields = new_fields
-            ids.append(importer.insert_reference(conn, fields, authors))
+            rid = importer.insert_reference(conn, fields, authors)
+            if rid is not None:   # None -> malformed bare-DOI/number "reference", skipped
+                ids.append(rid)
         conn.commit()
         count = conn.execute("SELECT COUNT(*) c FROM reference").fetchone()["c"]
         return {"imported": len(ids), "library_size": count, "resolved": resolved}

@@ -51,6 +51,8 @@
           <div class="lbl">Quality</div>
           <button class="nav" data-screen="integrity">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s7-3.5 7-9V5l-7-2-7 2v7c0 5.5 7 9 7 9z"/><path d="M9 12l2 2 4-4"/></svg> Integrity check <span class="badge" id="navFlagBadge"></span></button>
+          <button class="nav" data-screen="health">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 6L9 17l-5-5"/></svg> Library health <span class="badge" id="navHealthBadge"></span></button>
         </div>
         <div class="navgroup">
           <div class="lbl">Formatting</div>
@@ -116,6 +118,15 @@
               <p>In real use you insert citations from Word or LibreOffice, then check them here. To see exactly what SANAD catches — a wrong year, a review-venue mix-up, a source cited out of context — run a demo check on a small sample document.</p>
             </div>
           </div>
+        </section>
+
+        <!-- LIBRARY HEALTH -->
+        <section class="screen" id="health" hidden>
+          <div class="toolbar"><h2>Library health</h2><div class="grow"></div>
+            <button class="btn" id="healthRefreshBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg> Refresh</button>
+          </div>
+          <p class="sub" style="margin:-6px 0 16px">A self-diagnosing check of your library's data quality — everything here is found automatically, but <b>nothing is ever removed without you choosing it, row by row.</b></p>
+          <div id="healthBody"><div class="empty"><h3>Loading…</h3></div></div>
         </section>
 
         <!-- DOCUMENTS -->

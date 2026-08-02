@@ -1,32 +1,33 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  SANAD Word add-in manifest (Office.js).
+  SANAD Word add-in manifest (Office.js) — PRODUCTION.
+
+  This is the manifest to sideload for real use: Word → Insert → My Add-ins →
+  Upload My Add-in → pick this file. It points at the hosted task pane on
+  GitHub Pages, needs no local server, and just works.
 
   A thin client of the LOCAL SANAD Core: it inserts citations, rebuilds the
   reference list, and runs the integrity check — writing only inside its own
   tagged content controls, never your prose. The Core stays on 127.0.0.1; only
-  this small task-pane UI is served over HTTPS (an Office requirement).
+  this small task-pane UI is served over HTTPS (an Office requirement) — your
+  document itself never leaves your machine.
 
-  URLs: this file ships pointing at https://localhost:3000 so you can test it
-  today (see connectors/README.md). TO HOST IT on your own domain, replace every
-  "https://localhost:3000" with your HTTPS host, e.g.:
-      sed 's#https://localhost:3000#https://sanad.YOURDOMAIN#g' \
-          manifest.xml > manifest.prod.xml
-  then sideload manifest.prod.xml. Nothing else changes.
+  For local development instead, use `manifest.dev.xml` (points at
+  https://localhost:3000, needs a dev server running — see connectors/README.md).
 -->
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
            xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
            xsi:type="TaskPaneApp">
   <Id>f2607629-491b-4ac0-806a-f1bc745fdb97</Id>
-  <Version>0.2.4.0</Version>
+  <Version>0.2.5.0</Version>
   <ProviderName>SANAD</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="SANAD — the RefGuard" />
   <Description DefaultValue="Insert citations from your local SANAD library, rebuild your reference list, and check citations for integrity — without ever touching your prose." />
-  <IconUrl DefaultValue="https://localhost:3000/assets/icon-32.png" />
-  <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-80.png" />
-  <SupportUrl DefaultValue="https://localhost:3000/" />
+  <IconUrl DefaultValue="https://sajidmahmoodfarooqi-png.github.io/SANAD-thRefGuard/assets/icon-32.png" />
+  <HighResolutionIconUrl DefaultValue="https://sajidmahmoodfarooqi-png.github.io/SANAD-thRefGuard/assets/icon-80.png" />
+  <SupportUrl DefaultValue="https://sajidmahmoodfarooqi-png.github.io/SANAD-thRefGuard/" />
 
   <Hosts>
     <Host Name="Document" />
@@ -38,7 +39,7 @@
   </Requirements>
 
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://localhost:3000/taskpane.html" />
+    <SourceLocation DefaultValue="https://sajidmahmoodfarooqi-png.github.io/SANAD-thRefGuard/taskpane.html" />
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>

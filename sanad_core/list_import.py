@@ -162,7 +162,9 @@ def parse_docx(data: bytes) -> list[tuple[dict, list[dict]]]:
 # --------------------------------------------------------------------------- #
 
 def _import_rows(conn: sqlite3.Connection, rows: list[tuple[dict, list[dict]]]) -> list[str]:
-    ids = [importer.insert_reference(conn, fields, authors) for fields, authors in rows]
+    # None -> insert_reference rejected a malformed bare-DOI/number "reference"
+    ids = [rid for fields, authors in rows
+           if (rid := importer.insert_reference(conn, fields, authors)) is not None]
     conn.commit()
     return ids
 

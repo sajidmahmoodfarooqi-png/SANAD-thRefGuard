@@ -172,6 +172,132 @@ def find_duplicate_groups(conn: sqlite3.Connection) -> list[dict]:
     return out
 
 
+def library_health(conn: sqlite3.Connection) -> dict:
+    """A self-diagnosing snapshot of the library's data quality, surfaced
+    directly in the app so a lone user can see and act on hygiene issues
+    without ever touching the database. Four independent checks:
+
+      - missing_doi: references with no DOI on file. Purely informational --
+        DOI lookup is opt-in per reference (privacy), so this does not mean
+        anything failed.
+      - malformed: references whose title is a bare DOI/URL fragment or number
+        with no author -- import artifacts, not real references. importer.py
+        now rejects these at import time (looks_like_malformed_bare_reference),
+        but that guard only protects future imports; this is a RETROACTIVE scan
+        so anything that got in before the guard existed is still found and can
+        be removed here.
+      - exact_duplicate_count: the same count find_duplicate_groups() already
+        resolves via the "Remove duplicates" button (same DOI, or same
+        normalized title + same year).
+      - near_duplicate_groups: references similar enough in title to likely be
+        the same work but not already resolved above -- catches spelling/case
+        variants (e.g. "Modeling"/"modelling") that exact normalization alone
+        would miss, not just a year difference. A conflicting DOI on either
+        side rules the pair out (a genuinely different work, e.g. an erratum).
+        Similarity threshold (0.88, difflib.SequenceMatcher on normalized
+        titles) was tuned by hand against a real 449-reference library: it
+        found the real near-duplicates present (including the exact
+        "Modeling"/"modelling" case above) without flagging genuinely
+        different papers. Pairs sharing a member are merged into one cluster.
+        Never auto-merged -- listed for manual review via the Library screen's
+        own sort+delete tool only."""
+    from difflib import SequenceMatcher
+
+    from .importer import (looks_like_malformed_bare_reference, normalize_doi,
+                           normalize_title)
+
+    rows = conn.execute("SELECT id, title, year, doi FROM reference").fetchall()
+    total = len(rows)
+    missing_doi = sum(1 for r in rows if not (r["doi"] or "").strip())
+
+    author_count = {
+        r["reference_id"]: r["c"] for r in conn.execute(
+            "SELECT reference_id, COUNT(*) c FROM reference_author GROUP BY reference_id")
+    }
+    malformed = [
+        {"id": r["id"], "title": r["title"], "year": r["year"]}
+        for r in rows
+        if looks_like_malformed_bare_reference(
+            r["title"], [{}] * author_count.get(r["id"], 0))
+    ]
+
+    exact_groups = find_duplicate_groups(conn)
+    exact_ids = {rid for g in exact_groups for rid in ([g["keep"]] + g["remove"])}
+    exact_duplicate_count = sum(len(g["remove"]) for g in exact_groups)
+
+    by_id = {r["id"]: r for r in rows}
+    candidates = [r for r in rows if r["id"] not in exact_ids and normalize_title(r["title"])]
+    NEAR_DUP_THRESHOLD = 0.88
+    parent: dict[str, str] = {}
+
+    def find(x: str) -> str:
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]   # path compression
+            x = parent[x]
+        return x
+
+    def union(x: str, y: str) -> None:
+        rx, ry = find(x), find(y)
+        if rx != ry:
+            parent[rx] = ry
+
+    # Precompute each candidate's normalized title once (not per-pair -- an
+    # all-pairs pass already means O(n^2) comparisons, no need to also redo the
+    # normalization work itself that many times).
+    normed = [normalize_title(r["title"]) for r in candidates]
+    dois = [normalize_doi(r["doi"]) for r in candidates]
+    sm = SequenceMatcher()   # reused across every pair; set_seqs() is cheap,
+                              # avoids constructing a new matcher per comparison
+
+    clustered_ids: set[str] = set()
+    for i in range(len(candidates)):
+        na = normed[i]
+        for j in range(i + 1, len(candidates)):
+            nb = normed[j]
+            if na == nb:
+                ratio = 1.0
+            else:
+                sm.set_seqs(na, nb)
+                # quick_ratio()/real_quick_ratio() are cheap UPPER BOUNDS on the
+                # real ratio() -- skip the expensive full comparison unless one
+                # says there's still a chance of reaching the threshold. This
+                # cannot miss a real match (both are proven upper bounds), and
+                # cuts an all-pairs pass over a few hundred references from
+                # tens of seconds to a fraction of a second in practice, since
+                # almost every pair in a real library is obviously dissimilar.
+                if sm.real_quick_ratio() < NEAR_DUP_THRESHOLD or sm.quick_ratio() < NEAR_DUP_THRESHOLD:
+                    continue
+                ratio = sm.ratio()
+            if ratio < NEAR_DUP_THRESHOLD:
+                continue
+            a, b = candidates[i], candidates[j]
+            doi_a, doi_b = dois[i], dois[j]
+            if doi_a and doi_b and doi_a != doi_b:
+                continue  # different DOIs -> genuinely distinct, not a near-dup
+            union(a["id"], b["id"])
+            clustered_ids.update((a["id"], b["id"]))
+
+    clusters: dict[str, list[str]] = {}
+    for rid in clustered_ids:
+        clusters.setdefault(find(rid), []).append(rid)
+    near_groups = [
+        {"title": by_id[ids[0]]["title"],
+         "members": [{"id": rid, "title": by_id[rid]["title"], "year": by_id[rid]["year"],
+                     "doi": by_id[rid]["doi"]} for rid in sorted(ids)]}
+        for ids in clusters.values()
+    ]
+
+    return {
+        "total": total,
+        "missing_doi": missing_doi,
+        "exact_duplicate_count": exact_duplicate_count,
+        "malformed": malformed,
+        "near_duplicate_groups": near_groups,
+        "near_duplicate_count": sum(len(g["members"]) for g in near_groups),
+    }
+
+
 def deduplicate_library(conn: sqlite3.Connection) -> dict:
     """Remove exact-duplicate references, keeping one canonical copy of each and
     repointing any citations / source-map matches at the keeper first, so no

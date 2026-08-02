@@ -5,8 +5,8 @@
   "description": "Local-run tooling for the SANAD Word add-in (dev/testing only).",
   "scripts": {
     "dev-server": "node dev-server.js",
-    "start": "office-addin-debugging start manifest.xml",
-    "stop": "office-addin-debugging stop manifest.xml"
+    "start": "office-addin-debugging start manifest.dev.xml",
+    "stop": "office-addin-debugging stop manifest.dev.xml"
   },
   "devDependencies": {
     "office-addin-debugging": "^6.0.2",

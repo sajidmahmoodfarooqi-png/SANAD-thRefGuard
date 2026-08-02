@@ -61,6 +61,7 @@ function go(id) {
   document.querySelectorAll(".screen").forEach((s) => (s.hidden = s.id !== id));
   if (id === "library") loadLibrary();
   if (id === "style") loadStyles();
+  if (id === "health") loadHealth();
 }
 document.querySelectorAll("[data-screen]").forEach((b) => b.addEventListener("click", () => go(b.getAttribute("data-screen"))));
 
@@ -209,7 +210,8 @@ function showDetail(r) {
   d.querySelector("#refDelete").addEventListener("click", () => deleteReference(r));
 }
 
-async function deleteReference(r) {
+async function deleteReference(r, onDone) {
+  onDone = onDone || loadLibrary;   // caller can refresh a different screen (e.g. Library health)
   const title = (r.title || "").slice(0, 80);
   openModal(`
     <div class="modal-h"><h3>Delete reference?</h3><button class="modal-x" data-close>&times;</button></div>
@@ -220,10 +222,92 @@ async function deleteReference(r) {
       const res = await api(`/v1/library/${encodeURIComponent(r.id)}`, { method: "DELETE" });
       closeModal();
       toast(res.deleted ? `Deleted — library holds ${res.library_size}` : "Already gone");
-      loadLibrary();
+      onDone();
     } catch (e) { toast("Couldn't delete: " + e.message); }
   });
 }
+
+// --- library health ---------------------------------------------------------- //
+// A self-diagnosing check of the library's data quality, surfaced directly in
+// the app -- nothing here is auto-removed; every action is one explicit click.
+async function loadHealth() {
+  const body = $("healthBody");
+  let h;
+  try {
+    h = await api("/v1/library/health");
+  } catch {
+    body.innerHTML = `<div class="empty"><h3>Core not reachable</h3><p>The SANAD Core service isn't responding.</p></div>`;
+    return;
+  }
+  const issues = h.malformed.length + h.near_duplicate_count + h.exact_duplicate_count;
+  const badge = $("navHealthBadge");
+  badge.textContent = issues || "";
+  badge.classList.toggle("show", issues > 0);
+
+  const cards = `
+    <div class="metrics" style="margin-bottom:20px">
+      <div class="metric"><div class="l">Total references</div><div class="n">${h.total}</div><div class="d">in your library</div></div>
+      <div class="metric"><div class="l">Missing DOI</div><div class="n">${h.missing_doi}</div><div class="d">informational only</div></div>
+      <div class="metric"><div class="l">Exact duplicates</div><div class="n">${h.exact_duplicate_count}</div><div class="d">${h.exact_duplicate_count ? "see Library → Remove duplicates" : "none found"}</div></div>
+      <div class="metric"><div class="l">Malformed entries</div><div class="n">${h.malformed.length}</div><div class="d">import artifacts</div></div>
+    </div>`;
+
+  if (!h.malformed.length && !h.near_duplicate_groups.length && !h.exact_duplicate_count) {
+    body.innerHTML = cards + `<div class="empty"><h3>Looking healthy</h3><p>No malformed entries, exact duplicates, or likely near-duplicates found.</p></div>`;
+    return;
+  }
+
+  const malformedHtml = h.malformed.length ? `
+    <div class="panel" style="margin-bottom:20px">
+      <div class="ph">Malformed entries (${h.malformed.length})</div>
+      <p style="font-size:13px;color:var(--muted);padding:0 15px 10px">A bare DOI or number sitting in the title field, with no real author or content — import artifacts from before SANAD started rejecting these at import. Safe to delete.</p>
+      <div id="healthMalformedList"></div>
+    </div>` : "";
+
+  const nearHtml = h.near_duplicate_groups.length ? `
+    <div class="panel">
+      <div class="ph">Possible duplicates (${h.near_duplicate_groups.length} group${h.near_duplicate_groups.length === 1 ? "" : "s"}, ${h.near_duplicate_count} references)</div>
+      <p style="font-size:13px;color:var(--muted);padding:0 15px 10px">Titles similar enough to likely be the same work — a spelling variant, or the same paper listed under two years — that exact matching alone would miss. <b>Not removed automatically</b>, since a genuine revision can look like this too. Review each group and delete the copy you don't need.</p>
+      <div id="healthNearList"></div>
+    </div>` : "";
+
+  body.innerHTML = cards + malformedHtml + nearHtml;
+
+  if (h.malformed.length) {
+    const list = $("healthMalformedList");
+    list.innerHTML = h.malformed.map((m) => `
+      <div class="flag info" style="margin-bottom:8px">
+        <div class="top"><span class="rl">${esc(m.title)}</span>${m.year != null ? `<span class="rl">${m.year}</span>` : ""}</div>
+        <div class="acts2"><button class="btn small danger" data-del="${esc(m.id)}">Delete</button></div>
+      </div>`).join("");
+    list.querySelectorAll("[data-del]").forEach((btn) => btn.addEventListener("click", () => {
+      const m = h.malformed.find((x) => x.id === btn.dataset.del);
+      if (m) deleteReference(m, loadHealth);
+    }));
+  }
+
+  if (h.near_duplicate_groups.length) {
+    const list = $("healthNearList");
+    list.innerHTML = h.near_duplicate_groups.map((g, gi) => `
+      <div class="flag warn" style="margin-bottom:10px">
+        <div class="top"><span class="rl">Group ${gi + 1}</span></div>
+        ${g.members.map((m) => `
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--hairline)">
+            <div style="flex:1"><div style="font-size:13.5px">${esc(m.title)}</div><div style="font-size:11.5px;color:var(--faint)">${m.year ?? "—"}${m.doi ? " · " + esc(m.doi) : ""}</div></div>
+            <button class="btn small" data-del="${esc(m.id)}">Delete this copy</button>
+          </div>`).join("")}
+      </div>`).join("");
+    list.querySelectorAll("[data-del]").forEach((btn) => btn.addEventListener("click", () => {
+      let member;
+      for (const g of h.near_duplicate_groups) {
+        member = g.members.find((x) => x.id === btn.dataset.del);
+        if (member) break;
+      }
+      if (member) deleteReference(member, loadHealth);
+    }));
+  }
+}
+$("healthRefreshBtn")?.addEventListener("click", loadHealth);
 
 // --- style profiles -------------------------------------------------------- //
 async function loadStyles() {
@@ -761,6 +845,24 @@ $("openGuideBtn")?.addEventListener("click", async () => {
   });
 })();
 
+// --- Home-screen dashboard stats on cold boot ------------------------------ //
+// go() only populates mSources/mStyles when the user actually visits Library or
+// Style profiles, so a fresh launch showed "—" until you happened to click one
+// of those tabs. This does the same two lightweight lookups loadLibrary()/
+// loadStyles() already use (total count only, no full list render) once at
+// startup, so Home shows real numbers immediately.
+async function refreshHomeStats() {
+  try {
+    const lib = await api(`/v1/library?limit=1`);
+    $("mSources").textContent = lib.total ?? 0;
+  } catch { /* Core not up yet — pollHealth's retry will still show status */ }
+  try {
+    const st = await api("/v1/style-profiles");
+    $("mStyles").textContent = (st.profiles || []).length;
+  } catch { /* leave as-is */ }
+}
+
 // --- boot ------------------------------------------------------------------ //
 pollHealth();
+refreshHomeStats();
 setInterval(pollHealth, 5000);
