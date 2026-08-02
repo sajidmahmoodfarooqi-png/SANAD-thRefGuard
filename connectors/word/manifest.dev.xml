@@ -23,7 +23,7 @@
            xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
            xsi:type="TaskPaneApp">
   <Id>f2607629-491b-4ac0-806a-f1bc745fdb97</Id>
-  <Version>0.2.6.0</Version>
+  <Version>0.2.7.0</Version>
   <ProviderName>SANAD</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="SANAD — the RefGuard (dev)" />

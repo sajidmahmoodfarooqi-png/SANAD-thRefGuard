@@ -1,5 +1,17 @@
 # Release notes
 
+## v0.2.7 — connect-to-Word is unmissable now, and import tells you about duplicates
+
+- **"Connect to Microsoft Word" now on the Home screen**, not only in Settings —
+  the token, a Copy button, and a link to the how-to are visible the moment you
+  open the app, so there's no chance of not finding it.
+- **Importing now tells you if it found duplicates.** Previously, duplicates
+  and malformed entries only surfaced if you happened to open Library health
+  yourself — a large messy import could silently sit there unreviewed. Now,
+  right after any import, if the library has exact duplicates, possible
+  duplicates, or malformed entries, a notice offers to take you straight to
+  Library health to review them.
+
 ## v0.2.6 — build your library from a plain list of titles
 
 - **"Build from titles"** (Library screen) — paste your reading list, numbered

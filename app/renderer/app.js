@@ -464,8 +464,25 @@ async function doImport(body) {
     toast(`Imported ${r.imported}${extra} — library holds ${r.library_size}`);
     libOffset = 0; libLastQuery = null;  // show page 1 with the new total
     go("library");
+    checkHealthAfterImport();   // surface duplicates/malformed rows now, not only if you happen to open Library health later
   } catch (e) { toast("Import failed: " + e.message); }
   finally { importInFlight = false; }
+}
+
+async function checkHealthAfterImport() {
+  let h;
+  try { h = await api("/v1/library/health"); } catch { return; }
+  const issues = h.malformed.length + h.exact_duplicate_count + h.near_duplicate_count;
+  if (!issues) return;
+  const parts = [];
+  if (h.exact_duplicate_count) parts.push(`${h.exact_duplicate_count} exact duplicate${h.exact_duplicate_count === 1 ? "" : "s"}`);
+  if (h.near_duplicate_count) parts.push(`${h.near_duplicate_count} possible duplicate${h.near_duplicate_count === 1 ? "" : "s"}`);
+  if (h.malformed.length) parts.push(`${h.malformed.length} malformed entr${h.malformed.length === 1 ? "y" : "ies"}`);
+  openModal(`
+    <div class="modal-h"><h3>This import may have added duplicates</h3><button class="modal-x" data-close>&times;</button></div>
+    <div class="modal-b"><p style="font-size:13.5px;line-height:1.6">Your library now has <b>${parts.join(", ")}</b> — some may be new, some may already have been there. Nothing is removed automatically; review and delete row-by-row in <b>Library health</b>.</p></div>
+    <div class="modal-f"><button class="btn" data-close>Later</button><button class="btn primary" id="goHealthGo">Review now</button></div>`);
+  modalEl.querySelector("#goHealthGo").addEventListener("click", () => { closeModal(); go("health"); });
 }
 
 function wantsResolve() {
@@ -905,15 +922,23 @@ $("openGuideBtn")?.addEventListener("click", async () => {
 
 // --- Connect-to-Word panel (Settings): show token, copy, regenerate -------- //
 (function initConnect() {
-  const input = $("connToken");
-  if (input) input.value = window.sanadShell?.token || "";
-  $("connCopy")?.addEventListener("click", async () => {
+  const token = window.sanadShell?.token || "";
+  async function copyToken() {
     try {
-      const ok = await window.sanadShell?.copyToken?.(window.sanadShell?.token || "");
+      const ok = await window.sanadShell?.copyToken?.(token);
       toast(ok ? "Token copied — paste it into Word's Connect tab" : "Couldn't copy the token");
     } catch { toast("Couldn't copy the token"); }
-  });
+  }
+  // both the Home-screen card and the Settings card show/copy the same live
+  // token — Home so it's unmissable on first launch, Settings as the durable
+  // reference (with Regenerate, which only makes sense to offer once).
+  const connInput = $("connToken"); if (connInput) connInput.value = token;
+  const homeInput = $("homeConnToken"); if (homeInput) homeInput.value = token;
+  $("connCopy")?.addEventListener("click", copyToken);
+  $("homeConnCopy")?.addEventListener("click", copyToken);
   $("connHelp")?.addEventListener("click", (e) => { e.preventDefault(); go("help"); });
+  $("homeConnHelp")?.addEventListener("click", (e) => { e.preventDefault(); go("help"); });
+  $("homeConnSettings")?.addEventListener("click", (e) => { e.preventDefault(); go("settings"); });
   $("connRegen")?.addEventListener("click", () => {
     openModal(`
       <div class="modal-h"><h3>Regenerate token?</h3><button class="modal-x" data-close>&times;</button></div>
