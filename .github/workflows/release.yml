@@ -1,0 +1,84 @@
+name: Release
+
+# Push a version tag (e.g. v0.2.4) -> tests run, the Windows installer is built,
+# and a GitHub Release is published with the installer attached. No manual file
+# juggling. You can also run this manually (workflow_dispatch) to build and
+# download a test installer WITHOUT publishing a release.
+
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write        # required to create the release and upload the asset
+
+jobs:
+  build:
+    name: Build Windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Python deps + PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Run tests (release gate — a failing test blocks the release)
+        run: python -m pytest -q
+
+      - name: Verify the tag matches the app/core version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          APP=$(python -c "import json;print(json.load(open('app/package.json'))['version'])")
+          CORE=$(python -c "import sanad_core;print(sanad_core.__version__)")
+          echo "tag=$TAG  app/package.json=$APP  sanad_core=$CORE"
+          if [ "$TAG" != "$APP" ] || [ "$TAG" != "$CORE" ]; then
+            echo "::error::tag v$TAG must match app ($APP) and core ($CORE) versions"; exit 1
+          fi
+
+      - name: Freeze the Core (PyInstaller)
+        run: python packaging/build_core.py
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build the installer (electron-builder)
+        working-directory: app
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"   # unsigned build; don't attempt code signing
+        run: |
+          npm install
+          npm run dist
+
+      - name: Extract release notes for this version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: python packaging/extract_release_notes.py "${GITHUB_REF_NAME#v}" > RELEASE_BODY.md
+
+      - name: Upload installer as a build artifact (always)
+        uses: actions/upload-artifact@v4
+        with:
+          name: SANAD-Setup
+          path: app/dist/*.exe
+          if-no-files-found: error
+
+      - name: Publish GitHub Release (only on a version tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: SANAD the RefGuard ${{ github.ref_name }}
+          body_path: RELEASE_BODY.md
+          files: app/dist/*.exe
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
