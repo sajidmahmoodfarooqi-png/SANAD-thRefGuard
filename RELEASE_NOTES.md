@@ -1,5 +1,23 @@
 # Release notes
 
+## v0.2.4 — connect Word in one step (and it stays connected)
+
+**Local by design — your library and your writing never leave your computer.**
+The Word add-in talks only to the engine on your own machine (`127.0.0.1`), so
+your document and references are never sent online. Connecting it used to be a
+developer chore; now it's one step, once.
+
+- **Stable session token.** The token no longer changes on every restart — it's
+  saved locally and reused. So the add-in, which you paste it into once, keeps
+  working after a restart instead of needing a fresh paste every time.
+- **"Connect to Microsoft Word" panel** in Settings — shows your token, a **Copy**
+  button, clear paste-into-Word steps, and a **Regenerate** button to rotate it.
+  The panel explains *why*: this token is what keeps everything offline.
+- **The add-in remembers the token** across all your documents (not just the one),
+  so it's genuinely a one-time paste.
+- **In-app help: "Using the Word add-in"** — load it, connect once, and use
+  Insert / Reference list / Integrity.
+
 ## v0.2.3 — sort your library + delete a single reference
 
 Manual duplicate control, because the automatic detector only catches exact and

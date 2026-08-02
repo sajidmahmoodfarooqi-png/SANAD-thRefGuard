@@ -14,6 +14,13 @@ const $ = (id) => document.getElementById(id);
 // desktop app's Settings, or the sanad.token file next to the library) into the
 // add-in's connect field; it is kept in this document's own settings.
 function coreToken() {
+  // localStorage persists per-user across ALL your documents for this add-in, so
+  // the token is pasted once (roamingSettings is Outlook-only — unavailable here).
+  // Fall back to a per-document token saved by older versions.
+  try {
+    const ls = (window.localStorage.getItem("sanadToken") || "").trim();
+    if (ls) return ls;
+  } catch (_) { /* storage blocked */ }
   return (Office.context.document.settings.get("sanadToken") || "").trim();
 }
 
@@ -55,11 +62,17 @@ Office.onReady((info) => {
 // --- connect: store the Core session token in this document's settings ------ //
 function saveToken() {
   const v = ($("token").value || "").trim();
-  Office.context.document.settings.set("sanadToken", v);
-  Office.context.document.settings.saveAsync(() => {
-    $("connectMsg").innerHTML = v ? `<p class="muted">Saved. Checking connection…</p>` : `<p class="muted">Token cleared.</p>`;
-    pollHealth();
-  });
+  // localStorage = remembered for every document you open, so this is one-time.
+  // Also mirror into document settings as a reliable fallback if storage is wiped.
+  try { window.localStorage.setItem("sanadToken", v); } catch (_) {}
+  try {
+    Office.context.document.settings.set("sanadToken", v);
+    Office.context.document.settings.saveAsync();
+  } catch (_) {}
+  $("connectMsg").innerHTML = v
+    ? `<p class="muted">Saved for all your documents. Checking connection…</p>`
+    : `<p class="muted">Token cleared.</p>`;
+  pollHealth();
 }
 
 function showTab(name) {

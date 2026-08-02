@@ -741,6 +741,26 @@ $("openGuideBtn")?.addEventListener("click", async () => {
   }
 });
 
+// --- Connect-to-Word panel (Settings): show token, copy, regenerate -------- //
+(function initConnect() {
+  const input = $("connToken");
+  if (input) input.value = window.sanadShell?.token || "";
+  $("connCopy")?.addEventListener("click", async () => {
+    try {
+      const ok = await window.sanadShell?.copyToken?.(window.sanadShell?.token || "");
+      toast(ok ? "Token copied — paste it into Word's Connect tab" : "Couldn't copy the token");
+    } catch { toast("Couldn't copy the token"); }
+  });
+  $("connHelp")?.addEventListener("click", (e) => { e.preventDefault(); go("help"); });
+  $("connRegen")?.addEventListener("click", () => {
+    openModal(`
+      <div class="modal-h"><h3>Regenerate token?</h3><button class="modal-x" data-close>&times;</button></div>
+      <div class="modal-b"><p style="font-size:13.5px;line-height:1.6">This creates a new token and <b>restarts SANAD</b>. The Word add-in will disconnect — you'll paste the new token in once. Continue?</p></div>
+      <div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn danger" id="regenGo">Regenerate &amp; restart</button></div>`);
+    modalEl.querySelector("#regenGo").addEventListener("click", () => window.sanadShell?.regenerateToken?.());
+  });
+})();
+
 // --- boot ------------------------------------------------------------------ //
 pollHealth();
 setInterval(pollHealth, 5000);

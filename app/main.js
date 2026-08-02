@@ -6,17 +6,33 @@
 // quit. The renderer talks to the Core over http://127.0.0.1:23890 directly; the
 // main process only supervises it.
 
-const { app, BrowserWindow, shell, ipcMain } = require("electron");
+const { app, BrowserWindow, shell, ipcMain, clipboard } = require("electron");
 const { spawn } = require("child_process");
+const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
 const CORE_PORT = 23890;
 const CORE_URL = `http://127.0.0.1:${CORE_PORT}`;
-// A per-launch session token. The Core requires it on every request; we hand the
-// same value to the Core (env) and the renderer (preload). Nothing else can know
-// it, so no other local process or web page can drive the user's library.
-const TOKEN = crypto.randomBytes(24).toString("hex");
+// The Core requires this session token on every request; the same value is handed
+// to the Core (env) and the renderer (preload). Nothing else can know it, so no
+// other local process or web page can drive the user's library.
+//
+// It is PERSISTED (a 0600 file in the user's app-data folder) and reused across
+// launches — so the Word add-in, which the user pastes it into once, keeps working
+// after a restart instead of needing a fresh paste every time. "Regenerate token"
+// writes a new one and relaunches. It is set in app.whenReady (needs userData).
+let TOKEN = "";
+function tokenFilePath() { return path.join(app.getPath("userData"), "session-token"); }
+function loadOrCreateToken() {
+  try {
+    const t = fs.readFileSync(tokenFilePath(), "utf8").trim();
+    if (/^[a-f0-9]{32,}$/i.test(t)) return t;
+  } catch (_) { /* not created yet */ }
+  const t = crypto.randomBytes(24).toString("hex");
+  try { fs.writeFileSync(tokenFilePath(), t, { mode: 0o600 }); } catch (_) {}
+  return t;
+}
 // dev layout: app/ sits next to sanad_core/ in the repo. Packaged layout: the
 // frozen Core binary is shipped in resources/core/ (see package.json build).
 const DEV_ROOT = path.join(__dirname, "..");
@@ -35,6 +51,18 @@ function guidePath() {
 ipcMain.handle("sanad:open-guide", async () => {
   const err = await shell.openPath(guidePath());   // "" on success
   return { ok: !err, error: err || null };
+});
+
+// copy the session token to the clipboard, so the user can paste it into the
+// Word add-in's Connect tab (the one manual step that keeps everything offline)
+ipcMain.handle("sanad:copy", (_e, text) => { clipboard.writeText(String(text || "")); return true; });
+
+// rotate the token: write a fresh one and relaunch so the Core comes up with it.
+// The user re-pastes the new token into the add-in once.
+ipcMain.handle("sanad:regenerate-token", () => {
+  try { fs.writeFileSync(tokenFilePath(), crypto.randomBytes(24).toString("hex"), { mode: 0o600 }); } catch (_) {}
+  app.relaunch();
+  app.exit(0);
 });
 
 function coreLaunch() {
@@ -108,6 +136,7 @@ function createWindow(coreReady) {
 }
 
 app.whenReady().then(async () => {
+  TOKEN = loadOrCreateToken();     // stable token (needs userData, so set here)
   startCore();
   const ready = await waitForCore();
   createWindow(ready);

@@ -157,6 +157,21 @@
             <div class="setrow2"><span>Address</span><span class="v">127.0.0.1:23890</span></div>
             <div class="setrow2"><span>Data</span><span class="v">stored on this machine — no cloud</span></div>
           </div>
+          <div class="setcard connect-card">
+            <div class="connect-h">Connect to Microsoft Word</div>
+            <p class="connect-why"><b>Local by design — your library and your writing never leave this computer.</b> SANAD runs entirely on your machine. This token is how the Word add-in proves it's talking to <em>your</em> local engine on <span class="mono">127.0.0.1</span> and nothing else — so your document and references are <b>never sent online</b>. Other reference tools sync your library to their servers; SANAD doesn't, and this token is what guarantees it.</p>
+            <div class="token-row">
+              <input class="inp mono" id="connToken" readonly value="" aria-label="Session token"/>
+              <button class="btn" id="connCopy">Copy</button>
+            </div>
+            <ol class="connect-steps">
+              <li><b>Copy</b> the token above.</li>
+              <li>In Word: <b>Insert → My Add-ins → SANAD</b>, then open the <b>Connect</b> tab.</li>
+              <li><b>Paste</b> the token and click <b>Connect</b>.</li>
+            </ol>
+            <p class="connect-note">You do this <b>once</b> — SANAD keeps the same token across restarts, and the add-in remembers it. <a href="#" id="connHelp">How to use the Word add-in →</a></p>
+            <button class="btn small" id="connRegen">Regenerate token…</button>
+          </div>
           <div class="setcard">
             <div class="setrow2"><span>Appearance</span><span class="v">follows your system light / dark theme</span></div>
             <div class="setrow2"><span>Languages</span><span class="v">English · اردو / العربية (right-to-left)</span></div>
@@ -197,6 +212,14 @@
                 <tr><td><b>R8</b> Cited out of context</td><td>The sentence is about one topic but cites an unrelated source — a closer one may be in your library.</td><td>Review the suggestion. <em>SANAD suggests, you decide.</em></td></tr>
               </tbody>
             </table>
+
+            <h4>Using the Word add-in</h4>
+            <p>The add-in puts SANAD <em>inside</em> Word — insert citations, rebuild your reference list, and run the integrity check without leaving your document. Crucially, it talks only to your local engine on <span class="mono">127.0.0.1</span>, so <b>your document and library are never sent online</b> — that's the whole point of the one-time token step below.</p>
+            <ol>
+              <li><b>Load it in Word</b> — <b>Insert → My Add-ins → SANAD</b> (or <em>Upload My Add-in</em> with the SANAD manifest, once).</li>
+              <li><b>Connect once</b> — here in SANAD, open <b>Settings → Connect to Microsoft Word</b>, click <b>Copy</b>, then in Word's add-in open the <b>Connect</b> tab, <b>paste</b>, and click Connect. SANAD keeps the same token across restarts, so you only do this <b>once</b>.</li>
+              <li><b>Use it</b> — <b>Insert</b> drops a citation at the cursor, <b>Reference list</b> rebuilds the bibliography, <b>Integrity</b> checks every citation. It only ever writes inside its own citation/reference fields — never your prose.</li>
+            </ol>
 
             <h4>The "never touches your prose" guarantee</h4>
             <p>SANAD only ever writes inside its own citation and bibliography fields — it has no way to change your sentences, and this is enforced in code, not just promised. Even if SANAD is closed or uninstalled, your citations stay as ordinary, readable text; they never turn into broken links.</p>

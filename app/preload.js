@@ -16,4 +16,8 @@ contextBridge.exposeInMainWorld("sanadShell", {
   platform: process.platform,
   // open the complete offline guide in the system's default browser
   openGuide: () => ipcRenderer.invoke("sanad:open-guide"),
+  // copy the session token to the clipboard (to paste into the Word add-in)
+  copyToken: (t) => ipcRenderer.invoke("sanad:copy", t),
+  // rotate the token and relaunch (the user re-pastes it into the add-in once)
+  regenerateToken: () => ipcRenderer.invoke("sanad:regenerate-token"),
 });

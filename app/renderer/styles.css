@@ -204,6 +204,16 @@ table.lib tr.sel td { background:color-mix(in srgb, var(--accent) 10%, transpare
 .settings { padding:22px 24px; overflow-y:auto; }
 .settings h3 { font-family:var(--serif); font-weight:600; font-size:20px; margin:0 0 14px; }
 .setcard { background:var(--surface-2); border:1px solid var(--hairline); border-radius:12px; padding:16px 18px; margin-bottom:14px; }
+.connect-card { border-color:var(--seal, var(--hairline)); }
+.connect-h { font-family:var(--serif); font-weight:600; font-size:16px; margin-bottom:8px; }
+.connect-why { font-size:13px; line-height:1.65; color:var(--muted); margin:0 0 14px; }
+.connect-why b { color:var(--text); }
+.token-row { display:flex; gap:8px; align-items:center; margin-bottom:12px; }
+.token-row .inp { flex:1; font-size:12.5px; }
+.connect-steps { font-size:13px; line-height:1.6; margin:0 0 10px; padding-left:20px; color:var(--text); }
+.connect-steps li { margin:4px 0; }
+.connect-note { font-size:12.5px; color:var(--faint); line-height:1.6; margin:0 0 12px; }
+.connect-note a { color:var(--seal, var(--accent)); }
 .setrow2 { display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--hairline); font-size:13px; }
 .setrow2:last-child { border-bottom:none; }
 .setrow2 .v { font-family:var(--mono); font-size:12px; color:var(--muted); }
