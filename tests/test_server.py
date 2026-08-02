@@ -569,21 +569,24 @@ def test_library_health_reports_missing_doi_malformed_and_near_duplicates(client
     conn.commit(); conn.close()
 
     # 3) a near-duplicate pair: same normalized title, DIFFERENT year -> not
-    #    caught by the exact/same-year dedup pass, must show up as near-duplicate
+    #    caught by the exact/same-year dedup pass, must show up as near-duplicate.
+    # Invented example (a US/British spelling variant, same shape as the real
+    # case that motivated this feature) -- deliberately not a real title, so no
+    # residue of anyone's actual reference library ends up in the test suite.
     client.post("/v1/library/import", json={"format": "ris", "text":
-        "TY  - JOUR\nTI  - Multi-Function Radar Modeling: A Review\nAU  - Zhao, W\nPY  - 2024\nER  -"})
+        "TY  - JOUR\nTI  - Colour Calibration Methods for Field Sensors: A Review\nAU  - Zhao, W\nPY  - 2024\nER  -"})
     client.post("/v1/library/import", json={"format": "ris", "text":
-        "TY  - JOUR\nTI  - Multi-function Radar modelling: a review\nPY  - 2016\nER  -"})
+        "TY  - JOUR\nTI  - Color Calibration Methods for Field Sensors: a Review\nPY  - 2016\nER  -"})
 
     h = client.get("/v1/library/health").json()
     assert h["total"] == 5
     assert h["missing_doi"] == 4          # 4 of the 5 have no DOI on file
     assert h["malformed"] == [{"id": "bad1", "title": ".1109/JSTARS.2024.3402823", "year": None}]
     assert h["exact_duplicate_count"] == 0     # different years -> exact pass doesn't merge
-    assert h["near_duplicate_count"] == 2      # the radar-modeling pair
+    assert h["near_duplicate_count"] == 2      # the colour/color spelling-variant pair
     titles = {m["title"] for g in h["near_duplicate_groups"] for m in g["members"]}
-    assert "Multi-Function Radar Modeling: A Review" in titles
-    assert "Multi-function Radar modelling: a review" in titles
+    assert "Colour Calibration Methods for Field Sensors: A Review" in titles
+    assert "Color Calibration Methods for Field Sensors: a Review" in titles
 
 
 def test_library_health_excludes_entries_already_resolved_by_exact_dedup(client):
