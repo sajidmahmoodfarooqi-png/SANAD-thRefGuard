@@ -1,5 +1,17 @@
 # Release notes
 
+## v0.2.10 — the seal is the icon now, and you can actually see it
+
+- **The ornate SANAD seal is now the app icon** on your Desktop and Taskbar, and
+  the identity mark inside the app (header and About) — the brand you know,
+  everywhere. The seal's fine gold linework was invisible on light backgrounds
+  and at small sizes, so it is now set into a solid dark medallion with a bold
+  gold rim: it stays crisp and clearly visible on any background, right down to
+  the small taskbar size.
+- If your Desktop/Taskbar still shows the old icon straight after updating, that
+  is Windows caching the previous icon — sign out and back in (or run
+  `ie4uinit.exe -show`) and the seal appears.
+
 ## v0.2.9 — a visible app icon, author search that works, and an easier-to-find bibliography
 
 - **The app icon is solid and legible again.** On the desktop and taskbar the

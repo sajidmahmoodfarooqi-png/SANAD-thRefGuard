@@ -5,4 +5,4 @@ CSL-JSON formatting, Style Profiles, and citation-context integrity checks.
 See CONCEPT.md and MVP_SPEC.md at the repo root for the full design.
 """
 
-__version__ = "0.2.9"
+__version__ = "0.2.10"
