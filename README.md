@@ -85,6 +85,8 @@ SANAD is **local-first**: your library is a single file on your machine, the eng
 prove the add-in is talking to *your* local engine and nothing else. No account, no cloud, no
 tracking.
 
+📄 Full [Privacy Policy](https://sajidmahmoodfarooqi-png.github.io/SANAD-thRefGuard/privacy.html).
+
 ---
 
 ## For developers & contributors
