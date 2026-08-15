@@ -10,6 +10,39 @@
 const CORE = "http://127.0.0.1:23890";
 const $ = (id) => document.getElementById(id);
 
+// --- reviewer / first-run demo mode ---------------------------------------- //
+// When no local Core is reachable (an AppSource reviewer, or a brand-new user who
+// hasn't started the desktop app yet), the pane can preview itself with built-in
+// SAMPLE data so its features are visible. It is clearly labelled "sample" and
+// never claims to be real: Insert writes an obviously-sample citation, and the
+// Integrity list shows fixed example findings. Real usage is unaffected — demo
+// mode only turns on when the user explicitly clicks "Preview with sample data".
+let DEMO = false;
+const DEMO_REFS = [
+  { id: "d1", title: "A framework for resilient urban water networks", authors: "Alvarez, M. & Okonkwo, P.", year: 2019,
+    cite: "(Alvarez & Okonkwo, 2019)", entry: "Alvarez, M., & Okonkwo, P. (2019). A framework for resilient urban water networks. Journal of Urban Systems, 11, 44–61." },
+  { id: "d2", title: "Spatial equity in urban green infrastructure", authors: "Nakamura, Y.", year: 2020,
+    cite: "(Nakamura, 2020)", entry: "Nakamura, Y. (2020). Spatial equity in urban green infrastructure. Landscape & Society, 14, 5–22." },
+  { id: "d3", title: "Remote sensing of informal settlement growth", authors: "Costa, L., Fenwick, A. & Reyes, D.", year: 2018,
+    cite: "(Costa et al., 2018)", entry: "Costa, L., Fenwick, A., & Reyes, D. (2018). Remote sensing of informal settlement growth. Remote Sensing Letters, 9, 301–314." },
+];
+const DEMO_SCAN = { flags: [
+  { rule_id: "R8_CONTEXT_MISALIGNMENT", severity: "warning",
+    message: "The citing sentence seems only weakly related to the source it cites — a closer source may fit better. (sample finding)",
+    suggestion: { alternatives: [{ similarity: 0.17, title: "Remote sensing of informal settlement growth" }] } },
+  { rule_id: "R1_YEAR_MISMATCH", severity: "error",
+    message: "In-text year 2018 does not match the source in your library (2019). Pick the correct year. (sample finding)" },
+  { rule_id: "R5_LISTED_NOT_CITED", severity: "info",
+    message: "“Participatory mapping methods” sits in your reference list but nothing cites it. (sample finding)" },
+] };
+function enterDemo() {
+  DEMO = true;
+  const bar = $("demoBar"); if (bar) bar.hidden = true;
+  const el = $("status"); el.className = "status on"; el.innerHTML = `<i></i> Demo · sample data (no engine)`;
+  showTab("insert");
+  $("results").innerHTML = `<p class="muted">Preview mode with built-in sample data. Type anything, insert a sample citation, then open <b>Integrity</b> or <b>Bibliography</b>. Connect a running SANAD engine to use your own library.</p>`;
+}
+
 // The Core requires a per-launch session token. The user pastes it once (from the
 // desktop app's Settings, or the sanad.token file next to the library) into the
 // add-in's connect field; it is kept in this document's own settings.
@@ -53,6 +86,7 @@ Office.onReady((info) => {
   $("scanBtn").addEventListener("click", runIntegrity);
   $("biblioBtn").addEventListener("click", insertBibliography);
   $("saveTokenBtn").addEventListener("click", saveToken);
+  document.querySelectorAll(".demo-start").forEach((b) => b.addEventListener("click", enterDemo));
   const tok = coreToken();
   if (tok) $("token").value = tok;
   pollHealth();
@@ -81,9 +115,19 @@ function showTab(name) {
 }
 
 async function pollHealth() {
+  if (DEMO) return;                       // demo mode owns the status line
   const el = $("status");
-  try { const h = await core("/v1/health"); el.className = "status on"; el.innerHTML = `<i></i> working locally · v${esc(h.version)}`; }
-  catch { el.className = "status off"; el.innerHTML = `<i></i> Core not running`; }
+  const bar = $("demoBar");
+  try {
+    const h = await core("/v1/health");
+    if (DEMO) return;                     // demo entered while this poll was in flight
+    el.className = "status on"; el.innerHTML = `<i></i> working locally · v${esc(h.version)}`;
+    if (bar) bar.hidden = true;
+  } catch {
+    if (DEMO) return;
+    el.className = "status off"; el.innerHTML = `<i></i> Core not running`;
+    if (bar) bar.hidden = false;          // offer the sample-data preview
+  }
 }
 
 // --- search + insert ------------------------------------------------------- //
@@ -92,8 +136,14 @@ async function search() {
   const box = $("results");
   if (!q) { box.innerHTML = `<p class="muted">Type to search your local library, then insert a citation at the cursor.</p>`; return; }
   let results;
-  try { results = (await core(`/v1/library/search?q=${encodeURIComponent(q)}&limit=25`)).results; }
-  catch (e) { box.innerHTML = `<p class="muted">Can't reach the Core: ${esc(e.message)}</p>`; return; }
+  if (DEMO) {
+    const ql = q.toLowerCase();
+    results = DEMO_REFS.filter((r) => r.title.toLowerCase().includes(ql) || r.authors.toLowerCase().includes(ql));
+    if (!results.length) results = DEMO_REFS;
+  } else {
+    try { results = (await core(`/v1/library/search?q=${encodeURIComponent(q)}&limit=25`)).results; }
+    catch (e) { box.innerHTML = `<p class="muted">Can't reach the Core: ${esc(e.message)}</p>`; return; }
+  }
   if (!results.length) { box.innerHTML = `<p class="muted">Nothing found for “${esc(q)}”.</p>`; return; }
   box.innerHTML = results.map((r) =>
     `<div class="res" data-id="${esc(r.id)}"><div class="rt">${esc(r.title)}</div><div class="rm">${esc(r.authors || "")}${r.year ? " · " + r.year : ""}</div></div>`).join("");
@@ -102,8 +152,13 @@ async function search() {
 
 async function insertCitation(refId) {
   let res;
-  try { res = await core("/v1/citations", { method: "POST", body: JSON.stringify({ document_id: docId(), reference_ids: [refId] }) }); }
-  catch (e) { return notify("Couldn't create citation: " + e.message); }
+  if (DEMO) {
+    const r = DEMO_REFS.find((x) => x.id === refId) || DEMO_REFS[0];
+    res = { citation_id: "demo-" + refId, rendered_text: r.cite };
+  } else {
+    try { res = await core("/v1/citations", { method: "POST", body: JSON.stringify({ document_id: docId(), reference_ids: [refId] }) }); }
+    catch (e) { return notify("Couldn't create citation: " + e.message); }
+  }
   await Word.run(async (ctx) => {
     const cc = ctx.document.getSelection().insertContentControl();
     cc.tag = "sanad-cite";          // the ONLY place this add-in ever writes
@@ -123,8 +178,12 @@ async function insertBibliography() {
   const msg = $("biblioMsg");
   msg.innerHTML = `<p class="muted">Building reference list…</p>`;
   let data;
-  try { data = await core(`/v1/documents/${docId()}/bibliography`); }
-  catch (e) { return (msg.innerHTML = `<p class="muted">Couldn't build it: ${esc(e.message)}</p>`); }
+  if (DEMO) {
+    data = { entries: DEMO_REFS.map((r) => r.entry), paragraph_style: {} };
+  } else {
+    try { data = await core(`/v1/documents/${docId()}/bibliography`); }
+    catch (e) { return (msg.innerHTML = `<p class="muted">Couldn't build it: ${esc(e.message)}</p>`); }
+  }
   const entries = data.entries || [];
   const ps = data.paragraph_style || {};
   if (!entries.length) { return (msg.innerHTML = `<p class="muted">No SANAD citations in this document yet — insert some first.</p>`); }
@@ -173,6 +232,7 @@ async function insertBibliography() {
 async function runIntegrity() {
   const box = $("flags");
   box.innerHTML = `<p class="muted">Checking…</p>`;
+  if (DEMO) { renderFlags(DEMO_SCAN); return; }   // sample findings, no engine needed
   // gather each sanad-cite control's surrounding paragraph as its citing context (Tier-B)
   const contexts = {};
   let present = [];

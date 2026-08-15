@@ -17,19 +17,24 @@ running on the same machine and the user has pasted a session token. Microsoft's
 tests add-ins on their own environment, where the Core is **not** installed — so out of the box the
 pane will show "Core not running" and they cannot exercise the features.
 
-You must make validation possible. Options, in order of preference:
+**✅ A reviewer demo mode is already built in** (`connectors/word/taskpane.js`). When no local Core
+is reachable, a **"No SANAD engine detected — Preview with sample data →"** banner appears under the
+tabs, and there's a matching button on the **Connect** tab. Clicking it enters a clearly-labelled
+**"Demo · sample data (no engine)"** mode: search returns sample references, Insert writes a sample
+citation into the document, Bibliography builds a sample list, and Integrity shows example findings
+(each marked *"sample finding"*). It never claims to be real data, and real usage is unaffected —
+demo mode only turns on when explicitly clicked.
 
-1. **A clear reviewer script + a short demo video** attached in the submission's *Notes for
-   certification*, showing: install the desktop app from the GitHub release, copy the token, paste
-   into Connect, then Insert/Bibliography/Integrity working. Provide a direct download link to the
-   installer. Many local-companion add-ins are certified this way.
-2. **A reviewer/demo mode** in the task pane: if it can't reach a local Core, show a clearly-labelled
-   "Demo (no engine)" view with canned data so a reviewer can see the UI and flags without the Core.
-   (Small change to `taskpane.js`; keep it obviously non-functional for real data.)
-3. A hosted read-only demo Core the pane can fall back to for review only — more work, not
-   recommended.
+**In the submission's *Notes for certification*, tell the reviewer exactly this:**
 
-Decide this before submitting; it's the most common reason a companion add-in gets rejected.
+> SANAD's add-in is a client of a free local engine (the SANAD desktop app). To review the add-in's
+> UI and features **without installing anything**, open the task pane and click **"Preview with
+> sample data"** (the banner under the tabs, or the button on the Connect tab). To test the real
+> end-to-end flow, install the desktop app from `<GitHub release link>`, copy the token from
+> Settings → Connect to Microsoft Word, and paste it into the add-in's Connect tab.
+
+A short **demo video** of the real flow is still a nice-to-have to attach. A hosted demo Core is not
+needed given the built-in demo mode.
 
 ## 1. Accounts & legal (one-time)
 
