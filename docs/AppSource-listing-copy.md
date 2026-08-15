@@ -86,7 +86,7 @@ English (also supports right-to-left / Urdu content)
 | **Support URL** | `https://github.com/sajidmahmoodfarooqi-png/SANAD-thRefGuard/issues` |
 | **Privacy policy URL** | `https://sajidmahmoodfarooqi-png.github.io/SANAD-thRefGuard/privacy.html` |
 | **Website / Help** | `https://sajidmahmoodfarooqi-png.github.io/SANAD-thRefGuard/` |
-| **Terms of use / EULA** | AGPL-3.0 — `https://github.com/sajidmahmoodfarooqi-png/SANAD-thRefGuard/blob/main/LICENSE` (or a short EULA page if Partner Center requires standalone terms) |
+| **Terms of use / EULA** | `https://sajidmahmoodfarooqi-png.github.io/SANAD-thRefGuard/terms.html` (a short Terms page pointing to the AGPL-3.0, with the as-is / liability language stores expect) |
 
 ## Assets to upload
 
