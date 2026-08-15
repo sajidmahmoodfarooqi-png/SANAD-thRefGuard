@@ -26,6 +26,11 @@
     <button class="tab" data-tab="connect">Connect</button>
   </nav>
 
+  <div id="demoBar" class="demo-bar" hidden>
+    <span>No SANAD engine detected.</span>
+    <button class="demo-start linkbtn" type="button">Preview with sample data →</button>
+  </div>
+
   <section class="tab-body" id="insert">
     <div class="search"><input id="q" type="search" placeholder="Search your library" /></div>
     <div class="results" id="results"><p class="muted">Type to search your local library, then insert a citation at the cursor.</p></div>
@@ -47,6 +52,10 @@
     <div class="search"><input id="token" type="password" placeholder="Paste SANAD token" /></div>
     <button class="btn primary" id="saveTokenBtn">Connect</button>
     <div class="flags" id="connectMsg"></div>
+    <div class="demo-block">
+      <p class="muted"><b>Reviewers &amp; first-time users:</b> preview the add-in with built-in sample data — no engine required.</p>
+      <button class="btn demo-start" type="button">Preview with sample data</button>
+    </div>
   </section>
 
   <footer class="tp-foot">
