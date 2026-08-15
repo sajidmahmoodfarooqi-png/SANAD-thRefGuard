@@ -425,18 +425,48 @@ def delete_reference(conn: sqlite3.Connection, ref_id: str) -> dict:
     return {"deleted": 1, "library_size": count_library(conn)}
 
 
+# words that are citation punctuation, not something stored in the library, so
+# a query like "Khan et al. 2025" searches for "khan" + "2025", not the literal
+# string "khan et al. 2025" (which matches no title or author field).
+_SEARCH_NOISE = {"et", "al", "and", "&", "the", "a", "an"}
+
+
+def _search_tokens(q: str) -> list[str]:
+    toks = []
+    for raw in (q or "").split():
+        t = raw.strip(".,;:()[]{}&'\"").replace("%", "").replace("_", "")
+        if t and t.lower() not in _SEARCH_NOISE:
+            toks.append(t)
+    return toks
+
+
 def search_library(conn: sqlite3.Connection, q: str, limit: int = 20) -> list[dict]:
-    like = f"%{q.strip()}%"
+    # Match on every meaningful word independently (AND), across title, journal,
+    # author name (family/given/literal) and year -- so "Khan 2025", "urban Khan",
+    # or "Khan et al." all find the right reference, not just an exact substring.
+    tokens = _search_tokens(q)
+    if not tokens:
+        return []
+
+    clauses, params = [], []
+    for t in tokens:
+        like = f"%{t}%"
+        clauses.append(
+            "(r.title LIKE ? OR r.container_title LIKE ? OR CAST(r.year AS TEXT) LIKE ?"
+            " OR r.id IN (SELECT ra.reference_id FROM reference_author ra"
+            "             JOIN author a ON a.id = ra.author_id"
+            "            WHERE a.family LIKE ? OR a.given LIKE ? OR a.literal LIKE ?))"
+        )
+        params += [like, like, like, like, like, like]
+
+    params.append(limit)
     rows = conn.execute(
-        """SELECT DISTINCT r.id, r.title, r.year, r.doi, r.item_type
-             FROM reference r
-             LEFT JOIN reference_author ra ON ra.reference_id = r.id
-             LEFT JOIN author a ON a.id = ra.author_id
-            WHERE r.title LIKE ? OR a.family LIKE ? OR a.literal LIKE ?
-                  OR CAST(r.year AS TEXT) LIKE ?
-            ORDER BY r.year DESC, r.title
-            LIMIT ?""",
-        (like, like, like, like, limit),
+        f"""SELECT r.id, r.title, r.year, r.doi, r.item_type
+              FROM reference r
+             WHERE {' AND '.join(clauses)}
+             ORDER BY r.year DESC, r.title
+             LIMIT ?""",
+        params,
     ).fetchall()
 
     out = []

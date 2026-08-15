@@ -165,6 +165,33 @@ def test_search_by_author_surname(seeded):
     assert any("distributed caching" in r["title"] for r in res)
 
 
+def _titles(client, q):
+    return [r["title"] for r in client.get("/v1/library/search", params={"q": q}).json()["results"]]
+
+
+def test_search_ignores_et_al_noise(seeded):
+    # "Nguyen et al." must find the caching paper -- "et al." is citation noise,
+    # never stored, and previously made the whole query match nothing.
+    assert any("distributed caching" in t for t in _titles(seeded, "Nguyen et al."))
+    assert any("distributed caching" in t for t in _titles(seeded, "Nguyen et al., 2016"))
+
+
+def test_search_multi_token_author_and_year(seeded):
+    # author surname + year together should still resolve the one reference
+    assert any("distributed caching" in t for t in _titles(seeded, "Ortega 2016"))
+    assert any("Art of Memory" in t for t in _titles(seeded, "Fisher 2001"))
+
+
+def test_search_tokens_are_anded(seeded):
+    # two authors who never co-occur on one reference -> no result (AND, not OR)
+    assert _titles(seeded, "Fisher Nguyen") == []
+
+
+def test_search_blank_or_noise_only_returns_empty(seeded):
+    assert _titles(seeded, "   ") == []
+    assert _titles(seeded, "et al.") == []
+
+
 def test_import_unknown_format_is_400(client):
     r = client.post("/v1/library/import", json={"format": "yaml", "text": "x"})
     assert r.status_code == 400

@@ -1,5 +1,22 @@
 # Release notes
 
+## v0.2.9 — a visible app icon, author search that works, and an easier-to-find bibliography
+
+- **The app icon is solid and legible again.** On the desktop and taskbar the
+  icon had been showing the faint, ornate seal (thin gold lines on a mostly
+  transparent background), which looked washed-out and colourless. The icon is
+  now the intended compact mark — the bracketed jade check on a dark tile —
+  which reads clearly at every size, including the small taskbar size. (The
+  ornate seal stays where it belongs: the installer splash and the About screen.)
+- **Searching by author name now works.** Typing an author's surname — with or
+  without "et al." and a year, e.g. "Khan et al. 2025" or just "Ortega" — now
+  finds the reference. Previously the whole query was matched as one exact piece
+  of text, so anything but an exact title fragment found nothing. Search now
+  matches each word on its own across the title, journal, author names and year.
+- **The bibliography is easier to find.** The tab that builds your reference
+  list is now labelled **Bibliography** (it was "Reference list"), and inserting
+  a citation now reminds you it's there.
+
 ## v0.2.8 — the Word add-in connects to the Core again
 
 - **Fixed: the Word add-in said "Core not running" (and then froze after you

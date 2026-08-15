@@ -112,7 +112,7 @@ async function insertCitation(refId) {
     cc.insertText(res.rendered_text, Word.InsertLocation.replace);
     await ctx.sync();
   });
-  notify("Citation inserted");
+  notify("Inserted — build the list from the Bibliography tab");
 }
 
 // --- reference list -------------------------------------------------------- //
