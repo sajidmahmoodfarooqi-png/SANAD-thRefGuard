@@ -1,0 +1,44 @@
+name: Integrity check feedback (missed / false flag)
+description: SANAD missed a real citation problem, or flagged something that was fine
+labels: ["integrity-feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        This is the most useful feedback we can get. Please **don't paste private/unpublished
+        text** — a paraphrased or invented example that shows the same shape is perfect.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What happened?
+      options:
+        - Missed a real problem (false negative)
+        - Flagged something that was actually correct (false positive)
+        - The suggestion was unhelpful or wrong
+    validations:
+      required: true
+  - type: dropdown
+    id: rule
+    attributes:
+      label: Which check (if known)?
+      options:
+        - "R1 — Year mismatch"
+        - "R2 — Venue looks wrong"
+        - "R3 — Orphaned citation"
+        - "R4 / R5 — Cited-not-listed / listed-not-cited"
+        - "R6 — Possible duplicate"
+        - "R7 — Ambiguous author/year"
+        - "R8 — Cited out of context"
+        - "Not sure"
+  - type: textarea
+    id: example
+    attributes:
+      label: A small example (paraphrased / invented is fine)
+      description: The citing sentence + the source it points to, and what the right outcome would be.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: SANAD version
+      placeholder: v0.2.10

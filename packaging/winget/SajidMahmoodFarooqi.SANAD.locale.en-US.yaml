@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: SajidMahmoodFarooqi.SANAD
+PackageVersion: "<VERSION>"
+PackageLocale: en-US
+Publisher: Sajid Mahmood Farooqi
+PublisherUrl: https://github.com/sajidmahmoodfarooqi-png
+PublisherSupportUrl: https://github.com/sajidmahmoodfarooqi-png/SANAD-thRefGuard/issues
+PackageName: SANAD — the RefGuard
+PackageUrl: https://github.com/sajidmahmoodfarooqi-png/SANAD-thRefGuard
+License: AGPL-3.0-or-later
+LicenseUrl: https://github.com/sajidmahmoodfarooqi-png/SANAD-thRefGuard/blob/main/LICENSE
+Copyright: Copyright (c) Sajid Mahmood Farooqi
+ShortDescription: Local-first citation companion for Word — checks that each citation is actually right, and never touches your prose.
+Description: |-
+  SANAD (the RefGuard) is a free, open-source, local-first citation companion for Microsoft Word
+  and LibreOffice. Beyond formatting, it checks whether each citation is actually right — the right
+  source, the right year, cited in the right place (integrity rules R1–R8) — and it only ever writes
+  inside its own citation and bibliography fields, never your prose. Everything runs on your own
+  machine on 127.0.0.1 with no account, no cloud, and no telemetry.
+Moniker: sanad
+Tags:
+  - citation
+  - references
+  - bibliography
+  - apa
+  - academic
+  - research
+  - thesis
+  - word-addin
+  - zotero-alternative
+  - local-first
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

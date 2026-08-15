@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SANAD — the RefGuard · citation integrity for Word</title>
+<meta name="description" content="A free, open-source, local-first citation companion for Microsoft Word. Checks that each citation is actually right — the right source, cited in the right place — and never touches your prose." />
+<meta property="og:title" content="SANAD — the RefGuard" />
+<meta property="og:description" content="Check that every citation is actually right — without ever touching your prose. Free, open-source, local-first." />
+<meta property="og:type" content="website" />
+<meta property="og:image" content="media/home.png" />
+<link rel="icon" href="media/seal.png" />
+<style>
+  :root{
+    --ink:#12151c; --ink2:#1a1f2a; --card:#1c2230; --line:#2a3240;
+    --gold:#c9a44f; --jade:#41b898; --paper:#efe8d6; --text:#e7e3d7; --muted:#a29d8f;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#1b2130,var(--ink)) fixed;color:var(--text);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:var(--gold);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 22px}
+  .btn{display:inline-block;padding:14px 26px;border-radius:10px;font-weight:600;font-size:16px;
+    box-shadow:0 2px 0 #0006,0 10px 24px #0005}
+  .btn.gold{background:linear-gradient(#d8b866,#c19a3f);color:#221b07;border:1px solid #e6ce8f}
+  .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+  header.hero{text-align:center;padding:64px 0 34px}
+  .seal{width:104px;height:104px}
+  h1{font-size:40px;margin:16px 0 6px;letter-spacing:.4px}
+  h1 .ur{color:var(--gold);font-weight:400}
+  .rg{color:var(--gold);font-style:italic;font-size:19px;margin-top:-4px}
+  .tag{font-size:20px;color:var(--paper);max-width:660px;margin:18px auto 8px;line-height:1.5}
+  .sub{color:var(--muted);max-width:620px;margin:0 auto}
+  .cta{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin:26px 0 10px}
+  .pills{color:var(--muted);font-size:14px;margin-top:6px}
+  .pills b{color:var(--jade);font-weight:600}
+  .shot{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:14px;
+    box-shadow:0 30px 70px #0008;margin:26px 0}
+  section{padding:34px 0}
+  h2{font-size:26px;text-align:center;margin:0 0 6px}
+  .lede{text-align:center;color:var(--muted);max-width:640px;margin:0 auto 26px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+  .card h3{margin:0 0 6px;font-size:17px}
+  .card p{margin:0;color:var(--muted);font-size:14.5px}
+  .card .ic{font-size:22px}
+  .word{display:grid;grid-template-columns:1.1fr .9fr;gap:30px;align-items:center}
+  .word img{width:100%;max-width:360px;border:1px solid var(--line);border-radius:14px;box-shadow:0 24px 60px #0008;margin:0 auto;display:block}
+  .steps{counter-reset:s;max-width:720px;margin:0 auto;display:grid;gap:14px}
+  .step{display:flex;gap:14px;align-items:flex-start;background:var(--ink2);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .step::before{counter-increment:s;content:counter(s);flex:none;width:30px;height:30px;border-radius:50%;
+    background:var(--gold);color:#221b07;font-weight:700;display:grid;place-items:center}
+  .privacy{background:var(--ink2);border:1px solid var(--line);border-radius:16px;padding:26px;text-align:center}
+  .privacy b{color:var(--jade)}
+  footer{border-top:1px solid var(--line);margin-top:26px;padding:26px 0 46px;color:var(--muted);text-align:center;font-size:14px}
+  footer a{margin:0 8px}
+  @media (max-width:720px){.word{grid-template-columns:1fr}h1{font-size:32px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <img class="seal" src="media/seal.png" alt="SANAD seal" />
+    <h1>SANAD <span class="ur">سند</span></h1>
+    <div class="rg">the RefGuard</div>
+    <p class="tag">Check that every citation is <em>actually right</em> — the right source, cited in the right place — without ever touching a word of your prose.</p>
+    <p class="sub">A free, open-source, <b>local-first</b> citation companion for Microsoft Word and LibreOffice. No account. No cloud. Your library and your writing never leave your computer.</p>
+    <div class="cta">
+      <a class="btn gold" href="https://github.com/sajidmahmoodfarooqi-png/SANAD-thRefGuard/releases/latest">⬇ Download for Windows</a>
+      <a class="btn ghost" href="https://github.com/sajidmahmoodfarooqi-png/SANAD-thRefGuard">View on GitHub</a>
+    </div>
+    <p class="pills"><b>Free &amp; open source</b> · Local-first · AGPL-3.0 · Windows</p>
+  </header>
+
+  <img class="shot" src="media/home.png" alt="SANAD desktop app — library and integrity checks running locally" />
+
+  <section>
+    <h2>Beyond formatting — integrity</h2>
+    <p class="lede">Most tools make a citation <em>look</em> right. SANAD checks whether it <em>is</em> right, entirely on your own machine.</p>
+    <div class="grid">
+      <div class="card"><div class="ic">🔎</div><h3>Context-integrity checking</h3><p>Wrong in-text year, a book resolved to a review venue, orphaned or duplicate references, author–year ambiguity — and a citation dropped into the wrong context, with a closer source suggested from your own library.</p></div>
+      <div class="card"><div class="ic">🔒</div><h3>Local-first &amp; private</h3><p>The engine runs on <code>127.0.0.1</code> and makes no outbound connections. No account, no cloud, no telemetry. Your unpublished work stays yours.</p></div>
+      <div class="card"><div class="ic">✍️</div><h3>Never touches your prose</h3><p>SANAD only writes inside its own citation and bibliography fields — enforced in code and proven by a fuzz test, not just promised.</p></div>
+      <div class="card"><div class="ic">🎓</div><h3>Handbook-driven formatting</h3><p>Turn your university's rules into a shareable Style Profile — indent, "et al." threshold, ampersand, spacing — over a real CSL style.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Right inside Word</h2>
+    <div class="word">
+      <div>
+        <p>The add-in puts SANAD <em>inside</em> Word — <b>Insert</b> a citation, rebuild the <b>Bibliography</b>, and run an <b>Integrity</b> check without leaving your document. It talks only to your local engine, so your document never goes online.</p>
+        <p class="sub">Catches R1–R8: wrong year, review-venue mix-ups, orphaned/duplicate/uncited references, ambiguous author–year, and out-of-context citations.</p>
+      </div>
+      <img src="media/word-addin.png" alt="SANAD Word add-in showing integrity check findings" />
+    </div>
+  </section>
+
+  <section>
+    <h2>Get started in 3 steps</h2>
+    <div class="steps">
+      <div class="step"><div><b>Download &amp; install</b> the Windows app, then open it.</div></div>
+      <div class="step"><div><b>Import your references</b> (RIS or BibTeX), or try the sample pack to see it working in two minutes.</div></div>
+      <div class="step"><div><b>Connect Word once</b> — copy the token from Settings, paste it into the add-in's Connect tab, then insert citations and run Integrity.</div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="privacy">
+      <h2>Your work stays on your machine</h2>
+      <p class="sub">SANAD is <b>local-first</b>: your library is a single file on your computer, the engine listens only on <code>127.0.0.1</code>, and it makes no outbound connections. Other reference tools sync your library to their servers — SANAD doesn't.</p>
+    </div>
+  </section>
+
+</div>
+<footer>
+  <div class="wrap">
+    <a href="https://github.com/sajidmahmoodfarooqi-png/SANAD-thRefGuard/releases/latest">Download</a> ·
+    <a href="https://github.com/sajidmahmoodfarooqi-png/SANAD-thRefGuard">GitHub</a> ·
+    <a href="https://github.com/sajidmahmoodfarooqi-png/SANAD-thRefGuard/issues">Report an issue</a> ·
+    <a href="https://github.com/sajidmahmoodfarooqi-png/SANAD-thRefGuard/blob/main/LICENSE">AGPL-3.0</a>
+    <p><b>SANAD</b> · سند — Arabic/Urdu for a <i>chain of authority</i>, and for a certificate or proof.</p>
+  </div>
+</footer>
+</body>
+</html>

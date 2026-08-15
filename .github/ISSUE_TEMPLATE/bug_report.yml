@@ -1,0 +1,54 @@
+name: Bug report
+description: Something didn't work as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve SANAD! Please fill in enough for us to reproduce it.
+  - type: input
+    id: version
+    attributes:
+      label: SANAD version
+      description: Shown in the app header / Settings → About (e.g. v0.2.10).
+      placeholder: v0.2.10
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where did it happen?
+      options:
+        - Desktop app
+        - Word add-in
+        - LibreOffice
+        - Building/running from source
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Windows 11 (or macOS 14, Ubuntu 24.04, …)
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or logs (optional)
+      description: Drag images in. Please don't paste private bibliography data.

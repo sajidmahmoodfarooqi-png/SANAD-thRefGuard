@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or idea (Discussions)
+    url: https://github.com/sajidmahmoodfarooqi-png/SANAD-thRefGuard/discussions
+    about: For questions, ideas, and general feedback, start a Discussion.
+  - name: Report a security vulnerability
+    url: https://github.com/sajidmahmoodfarooqi-png/SANAD-thRefGuard/security/advisories/new
+    about: Please report security issues privately, not as a public issue.
