@@ -20,7 +20,7 @@
            xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
            xsi:type="TaskPaneApp">
   <Id>f2607629-491b-4ac0-806a-f1bc745fdb97</Id>
-  <Version>0.2.7.0</Version>
+  <Version>1.0.0.0</Version>
   <ProviderName>SANAD</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="SANAD — the RefGuard" />
@@ -43,4 +43,70 @@
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>
+
+  <!-- Ribbon button (add-in command): adds a "SANAD" button to Word's Home tab that
+       opens the task pane. Required/expected for AppSource. -->
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Document">
+        <DesktopFormFactor>
+          <GetStarted>
+            <Title resid="GetStarted.Title" />
+            <Description resid="GetStarted.Description" />
+            <LearnMoreUrl resid="GetStarted.LearnMoreUrl" />
+          </GetStarted>
+          <FunctionFile resid="Commands.Url" />
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="SanadGroup">
+                <Label resid="Group.Label" />
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16" />
+                  <bt:Image size="32" resid="Icon.32" />
+                  <bt:Image size="80" resid="Icon.80" />
+                </Icon>
+                <Control xsi:type="Button" id="SanadTaskpaneButton">
+                  <Label resid="TaskpaneButton.Label" />
+                  <Supertip>
+                    <Title resid="TaskpaneButton.Label" />
+                    <Description resid="TaskpaneButton.Tooltip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16" />
+                    <bt:Image size="32" resid="Icon.32" />
+                    <bt:Image size="80" resid="Icon.80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>SanadTaskpane</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url" />
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16" DefaultValue="https://sajidmahmoodfarooqi-png.github.io/SANAD-thRefGuard/assets/icon-16.png" />
+        <bt:Image id="Icon.32" DefaultValue="https://sajidmahmoodfarooqi-png.github.io/SANAD-thRefGuard/assets/icon-32.png" />
+        <bt:Image id="Icon.80" DefaultValue="https://sajidmahmoodfarooqi-png.github.io/SANAD-thRefGuard/assets/icon-80.png" />
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Commands.Url" DefaultValue="https://sajidmahmoodfarooqi-png.github.io/SANAD-thRefGuard/commands.html" />
+        <bt:Url id="Taskpane.Url" DefaultValue="https://sajidmahmoodfarooqi-png.github.io/SANAD-thRefGuard/taskpane.html" />
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://sajidmahmoodfarooqi-png.github.io/SANAD-thRefGuard/" />
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="GetStarted.Title" DefaultValue="SANAD — the RefGuard" />
+        <bt:String id="Group.Label" DefaultValue="SANAD" />
+        <bt:String id="TaskpaneButton.Label" DefaultValue="SANAD" />
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="GetStarted.Description" DefaultValue="SANAD is ready. Click the SANAD button on the Home tab to insert citations, rebuild your bibliography, and check citation integrity." />
+        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Open SANAD to insert citations, rebuild the bibliography, and run integrity checks — without touching your prose." />
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
 </OfficeApp>

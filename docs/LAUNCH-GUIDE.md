@@ -136,11 +136,14 @@ The file to submit is `connectors/word/manifest.prod.xml`. Validate it first:
    ```
 3. It should report the manifest is valid. Fix anything it flags.
 
-> ⚠️ **Likely reviewer request — read this.** AppSource strongly prefers add-ins that add a **ribbon
-> button** ("add-in command"). The current manifest opens the pane from the add-ins list but has no
-> ribbon button. Microsoft may ask you to add one. This is a small, well-understood change to the
-> manifest — **ask me and I'll add and test it** before you submit (or after, if the reviewer asks).
-> Don't let it block you from starting the submission.
+> ✅ **The ribbon button is already built in.** The manifest now adds a **SANAD** button to Word's
+> **Home** tab (an "add-in command") that opens the task pane — this is what AppSource expects. The
+> manifest passes Microsoft's official validator with no errors.
+>
+> **Confirm it once before submitting:** sideload `connectors/word/manifest.prod.xml` in Word
+> (**Insert → My Add-ins → Upload My Add-in**), then look at the **Home** tab — you should see a
+> **SANAD** button. Click it; the task pane opens. If you don't see the button, close and reopen
+> Word once (Office caches add-in commands). Once you've seen the button, you're ready to submit.
 
 ### Step 6 — Start the add-in submission and fill the listing
 1. In Partner Center: **Marketplace offers** → **New offer** → **Office add-in** (or "Word add-in").
