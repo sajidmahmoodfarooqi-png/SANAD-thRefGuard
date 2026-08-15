@@ -1,5 +1,24 @@
 # Release notes
 
+## v0.2.8 — the Word add-in connects to the Core again
+
+- **Fixed: the Word add-in said "Core not running" (and then froze after you
+  pasted the token) even though the Core was up.** The task pane is a web page
+  served from GitHub Pages, so the browser inside Word labels its requests with
+  that web origin. The Core only recognised requests coming from `localhost` /
+  `127.0.0.1`, so the browser threw away even the Core's health reply — the
+  add-in never saw it and assumed the Core was down. The Core now recognises the
+  add-in's own address as a trusted caller, so the connection succeeds. Nothing
+  about the privacy model changes: the Core still listens only on your own
+  machine, still requires your session token on every request, and still refuses
+  every other web page.
+- **Fixed: the add-in appearing to hang right after connecting.** Modern
+  browsers add an extra permission check ("Private Network Access") before a web
+  page may talk to a service on your own machine; the Core now answers that check
+  so the request completes instead of stalling.
+- Advanced: the trusted add-in address can be overridden (e.g. for a fork hosted
+  elsewhere) with the `SANAD_ADDIN_ORIGINS` environment variable.
+
 ## v0.2.7 — connect-to-Word is unmissable now, and import tells you about duplicates
 
 - **"Connect to Microsoft Word" now on the Home screen**, not only in Settings —

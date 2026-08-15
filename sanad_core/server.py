@@ -185,16 +185,44 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
     from fastapi.middleware.cors import CORSMiddleware
     from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+    # The Word/Office task pane is a static page hosted off-box (GitHub Pages by
+    # default), so its *browser origin* is not loopback even though every request
+    # it makes is to this loopback Core. That trusted add-in origin must be allowed
+    # by CORS or the browser discards even the /v1/health response and the add-in
+    # reports "Core not running" while the Core is in fact answering. Loopback and
+    # file:// origins stay allowed via the regex; the add-in origin(s) are added
+    # explicitly and can be overridden with SANAD_ADDIN_ORIGINS (comma-separated).
+    addin_origins = [o.strip() for o in os.environ.get(
+        "SANAD_ADDIN_ORIGINS",
+        "https://sajidmahmoodfarooqi-png.github.io",
+    ).split(",") if o.strip()]
+
+    # Chromium (the engine behind the Office task pane on Windows) additionally
+    # guards a request from a public origin to a private/loopback address with
+    # Private Network Access: the CORS preflight carries
+    # Access-Control-Request-Private-Network: true and the response must echo
+    # Access-Control-Allow-Private-Network: true, or the real request never fires
+    # (the add-in appears to hang after connecting). CORSMiddleware does not set
+    # this, so add it on the preflight it builds, from just outside CORS.
+    async def _pna(request: Request, call_next):
+        resp = await call_next(request)
+        if (request.method == "OPTIONS"
+                and request.headers.get("access-control-request-private-network") == "true"):
+            resp.headers["Access-Control-Allow-Private-Network"] = "true"
+        return resp
+
     # add order matters: last-added runs outermost. We want
-    # TrustedHost -> CORS -> auth -> routes.
+    # TrustedHost -> PNA -> CORS -> auth -> routes.
     app.add_middleware(BaseHTTPMiddleware, dispatch=_auth)
     app.add_middleware(
         CORSMiddleware,
+        allow_origins=addin_origins,
         allow_origin_regex=r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|null|file://)$",
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(BaseHTTPMiddleware, dispatch=_pna)
     app.add_middleware(
         TrustedHostMiddleware,
         allowed_hosts=["127.0.0.1", "localhost",

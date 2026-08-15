@@ -85,6 +85,60 @@ def test_foreign_host_header_is_rejected(client):
     assert r.status_code == 400
 
 
+# -- CORS / Private Network Access (the Word add-in is hosted off-box) ------- #
+
+ADDIN_ORIGIN = "https://sajidmahmoodfarooqi-png.github.io"
+
+
+def test_addin_origin_is_cors_allowed(client):
+    # The task pane is served from GitHub Pages, so the browser attaches that
+    # Origin. Without an Access-Control-Allow-Origin echo the browser discards
+    # even the health response and the add-in falsely reports "Core not running".
+    r = client.get("/v1/health", headers={"Origin": ADDIN_ORIGIN})
+    assert r.status_code == 200
+    assert r.headers.get("access-control-allow-origin") == ADDIN_ORIGIN
+
+
+def test_addin_preflight_is_allowed(client):
+    r = client.options("/v1/library/search", headers={
+        "Origin": ADDIN_ORIGIN,
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "authorization,content-type",
+    })
+    assert r.status_code == 200
+    assert r.headers.get("access-control-allow-origin") == ADDIN_ORIGIN
+
+
+def test_private_network_access_preflight(client):
+    # Chromium (Office task pane engine) requires this on a public-origin ->
+    # loopback request, or the real request never fires and the add-in hangs.
+    r = client.options("/v1/library/search", headers={
+        "Origin": ADDIN_ORIGIN,
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "authorization,content-type",
+        "Access-Control-Request-Private-Network": "true",
+    })
+    assert r.headers.get("access-control-allow-private-network") == "true"
+
+
+def test_untrusted_origin_is_not_cors_allowed(client):
+    # defence in depth stays intact: an arbitrary web page gets no CORS echo
+    r = client.get("/v1/health", headers={"Origin": "https://evil.example.com"})
+    assert r.headers.get("access-control-allow-origin") is None
+
+
+def test_addin_origins_are_configurable(tmp_path, monkeypatch):
+    monkeypatch.setenv("SANAD_ADDIN_ORIGINS", "https://my.fork.example")
+    app = create_app(tmp_path / "origins.db")
+    c = TestClient(app)
+    c.headers.update({"Authorization": f"Bearer {app.state.token}"})
+    assert c.get("/v1/health", headers={"Origin": "https://my.fork.example"}
+                 ).headers.get("access-control-allow-origin") == "https://my.fork.example"
+    # the default github.io origin is replaced, not appended
+    assert c.get("/v1/health", headers={"Origin": ADDIN_ORIGIN}
+                 ).headers.get("access-control-allow-origin") is None
+
+
 def test_websocket_requires_token(client):
     import pytest as _pytest
     from starlette.websockets import WebSocketDisconnect
