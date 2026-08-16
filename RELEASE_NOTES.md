@@ -1,5 +1,20 @@
 # Release notes
 
+## v0.2.12 — cleaner library, truer bibliography, smarter search
+
+- **Repair or remove malformed references.** Library health can now fix entries
+  whose "title" is really just a DOI or a link: it looks each one up on Crossref
+  and rebuilds it into a proper reference, or removes it if it can't be resolved.
+- **The bibliography follows your document.** If you delete a citation in Word,
+  it now drops out of the reference list when you rebuild — SANAD reconciles the
+  list against the citations actually present in your document.
+- **Search finds the right paper first.** Searching by author (e.g. "Bokhari et
+  al.") now ranks the paper where that person is the *lead* author above ones
+  where they're only a co-author.
+- Includes the Word add-in fixes from this cycle (the token field accepts a
+  paste, connecting to your engine works reliably, and the preview/demo mode
+  behaves correctly).
+
 ## v0.2.11 — your review decisions stick, and honest about the semantic check
 
 - **Your “reviewed” decisions on citation flags now stick for good.** Previously,
