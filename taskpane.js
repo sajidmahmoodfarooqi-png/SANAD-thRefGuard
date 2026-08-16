@@ -18,6 +18,8 @@ const $ = (id) => document.getElementById(id);
 // Integrity list shows fixed example findings. Real usage is unaffected — demo
 // mode only turns on when the user explicitly clicks "Preview with sample data".
 let DEMO = false;
+const demoCited = new Set();   // which sample refs the user actually inserted, so the
+                               // demo bibliography reflects the document (like the real engine)
 const DEMO_REFS = [
   { id: "d1", title: "A framework for resilient urban water networks", authors: "Alvarez, M. & Okonkwo, P.", year: 2019,
     cite: "(Alvarez & Okonkwo, 2019)", entry: "Alvarez, M., & Okonkwo, P. (2019). A framework for resilient urban water networks. Journal of Urban Systems, 11, 44–61." },
@@ -154,6 +156,7 @@ async function insertCitation(refId) {
   let res;
   if (DEMO) {
     const r = DEMO_REFS.find((x) => x.id === refId) || DEMO_REFS[0];
+    demoCited.add(r.id);   // remember it so the demo bibliography lists only what was inserted
     res = { citation_id: "demo-" + refId, rendered_text: r.cite };
   } else {
     try { res = await core("/v1/citations", { method: "POST", body: JSON.stringify({ document_id: docId(), reference_ids: [refId] }) }); }
@@ -179,7 +182,7 @@ async function insertBibliography() {
   msg.innerHTML = `<p class="muted">Building reference list…</p>`;
   let data;
   if (DEMO) {
-    data = { entries: DEMO_REFS.map((r) => r.entry), paragraph_style: {} };
+    data = { entries: DEMO_REFS.filter((r) => demoCited.has(r.id)).map((r) => r.entry), paragraph_style: {} };
   } else {
     try { data = await core(`/v1/documents/${docId()}/bibliography`); }
     catch (e) { return (msg.innerHTML = `<p class="muted">Couldn't build it: ${esc(e.message)}</p>`); }
