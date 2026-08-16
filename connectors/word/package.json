@@ -10,6 +10,6 @@
   },
   "devDependencies": {
     "office-addin-debugging": "^6.0.2",
-    "office-addin-dev-certs": "^1.13.0"
+    "office-addin-dev-certs": "^2.0.10"
   }
 }
