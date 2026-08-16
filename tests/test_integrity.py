@@ -323,3 +323,46 @@ def test_dismissal_is_scoped_to_the_same_finding(conn):
                if f["rule_id"] == "R1_YEAR_MISMATCH" and f["status"] == "open"]
     assert len(open_r1) == 1
     assert open_r1[0]["suggestion"]["reference_id"] == new
+
+
+# --- bibliography reconciliation + search ranking (v0.2.12 fixes) ----------- #
+
+def test_bibliography_drops_citations_deleted_in_word(conn):
+    """A citation deleted from the Word document (its control gone) must drop out
+    of the reference list. The add-in passes the still-present control ids; the
+    Core prunes the rest before building."""
+    a = add_ref(conn, "Paper A on cities", year=2020, authors=["Alpha"])
+    b = add_ref(conn, "Paper B on rivers", year=2021, authors=["Beta"])
+    ca = cite(conn, [a])
+    cite(conn, [b])                       # cb — the one the user later deletes in Word
+
+    assert len(documents.render_bibliography(conn, DOC)) == 2   # both present
+
+    # only ca is still in the document now
+    reconciled = documents.render_bibliography(conn, DOC, present_control_ids=[ca])
+    assert len(reconciled) == 1
+    # the stale citation row is gone, so it can't come back on the next build
+    remaining = [r["id"] for r in
+                 conn.execute("SELECT id FROM citation WHERE document_id = ?", (DOC,)).fetchall()]
+    assert remaining == [ca]
+
+
+def test_bibliography_payload_reconciles_too(conn):
+    a = add_ref(conn, "Kept paper", year=2020, authors=["Alpha"])
+    cite(conn, [a])
+    b = add_ref(conn, "Removed paper", year=2021, authors=["Beta"])
+    cite(conn, [b])
+    payload = documents.bibliography_payload(conn, DOC, present_control_ids=[])  # none present
+    assert payload["entries"] == []       # everything deleted in Word -> empty list
+
+
+def test_search_ranks_lead_author_first(conn):
+    """'Bokhari et al.' names Bokhari as the LEAD author, so a paper where Bokhari
+    is first should outrank one where Bokhari is only a co-author — even if the
+    co-authored one is newer."""
+    lead = add_ref(conn, "Governance of urban domestic waste", year=2024,
+                   authors=["Bokhari", "Khan"])
+    add_ref(conn, "Remote sensing of settlements", year=2025,
+            authors=["Khan", "Bokhari"])          # newer, but Bokhari is a co-author
+    res = documents.search_library(conn, "Bokhari et al.")
+    assert res[0]["id"] == lead

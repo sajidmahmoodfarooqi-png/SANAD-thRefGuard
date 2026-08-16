@@ -514,7 +514,12 @@ def search_library(conn: sqlite3.Connection, q: str, limit: int = 20) -> list[di
         )
         params += [like, like, like, like, like, like]
 
-    params.append(limit)
+    # Fetch a wider set than `limit`, then rank in Python: a citation like
+    # "Bokhari et al." names Bokhari as the LEAD author, so references where a
+    # query token matches the first author rank above ones where it's only a
+    # co-author. Fetching extra first means a strong lead-author match isn't
+    # dropped by the year-ordered cut before ranking.
+    params.append(max(limit * 4, 60))
     rows = conn.execute(
         f"""SELECT r.id, r.title, r.year, r.doi, r.item_type
               FROM reference r
@@ -524,6 +529,7 @@ def search_library(conn: sqlite3.Connection, q: str, limit: int = 20) -> list[di
         params,
     ).fetchall()
 
+    tok_low = [t.lower() for t in tokens]
     out = []
     for r in rows:
         authors = conn.execute(
@@ -533,10 +539,20 @@ def search_library(conn: sqlite3.Connection, q: str, limit: int = 20) -> list[di
             (r["id"],),
         ).fetchall()
         author_str = ", ".join(a["literal"] or a["family"] or "" for a in authors)
+        lead = authors[0] if authors else None
+        lead_name = ((lead["literal"] or lead["family"] or "") if lead else "").lower()
+        lead_match = 1 if (lead_name and any(t in lead_name for t in tok_low)) else 0
         out.append({
             "id": r["id"], "title": r["title"], "year": r["year"],
             "doi": r["doi"], "item_type": r["item_type"], "authors": author_str,
+            "_lead": lead_match,
         })
+
+    # lead-author matches first, then newest, then title; trim to the caller's limit
+    out.sort(key=lambda x: (-x["_lead"], -(x["year"] or 0), (x["title"] or "").lower()))
+    out = out[:limit]
+    for x in out:
+        x.pop("_lead", None)
     return out
 
 
@@ -610,10 +626,36 @@ def rerender_citation(conn: sqlite3.Connection, citation_id: str,
 # bibliography
 # --------------------------------------------------------------------------- #
 
-def render_bibliography(conn: sqlite3.Connection, document_id: str) -> list[str]:
+def reconcile_present_citations(conn: sqlite3.Connection, document_id: str,
+                                present_control_ids) -> int:
+    """Delete citation rows whose control is no longer in the document. SANAD
+    tracks citations in its own DB; when the user deletes a citation field
+    directly in Word, the DB never hears about it, so the bibliography (and
+    integrity) would keep counting a citation that's gone. The add-in enumerates
+    the citation controls actually present and passes their ids here; anything in
+    the DB for this document that isn't present is stale and removed. No-op when
+    present_control_ids is None (older callers / backward compatibility).
+    Returns the number of stale rows pruned."""
+    if present_control_ids is None:
+        return 0
+    present = set(present_control_ids)
+    rows = conn.execute(
+        "SELECT id FROM citation WHERE document_id = ?", (document_id,)).fetchall()
+    stale = [r["id"] for r in rows if r["id"] not in present]
+    for cid in stale:
+        conn.execute("DELETE FROM citation WHERE id = ?", (cid,))
+    if stale:
+        conn.commit()
+    return len(stale)
+
+
+def render_bibliography(conn: sqlite3.Connection, document_id: str,
+                        present_control_ids=None) -> list[str]:
     """Rebuild the whole reference list from every citation currently in the
     document, ordered per the style -- this is what fills the
-    `sanad-bibliography` content control, replacing 'Create Bibliography'."""
+    `sanad-bibliography` content control, replacing 'Create Bibliography'.
+    Pass present_control_ids to first drop citations deleted from the document."""
+    reconcile_present_citations(conn, document_id, present_control_ids)
     profile = _profile_for_document(conn, document_id)
     cites = conn.execute(
         "SELECT reference_ids FROM citation WHERE document_id = ?", (document_id,)
@@ -640,14 +682,17 @@ def render_bibliography(conn: sqlite3.Connection, document_id: str) -> list[str]
     return fmt.render_bibliography()
 
 
-def bibliography_payload(conn: sqlite3.Connection, document_id: str) -> dict:
+def bibliography_payload(conn: sqlite3.Connection, document_id: str,
+                         present_control_ids=None) -> dict:
     """The full response for the `sanad-bibliography` control: the rendered
     entries *and* the Office-ready paragraph formatting to apply to them, both
     derived from the document's active Style Profile. Content and layout arrive
     together so the add-in never has to make a second call to format what it
-    just rebuilt."""
+    just rebuilt. present_control_ids (when supplied) reconciles the DB against
+    the citations actually in the document first, so a citation deleted in Word
+    drops out of the list."""
     profile = _profile_for_document(conn, document_id)
     return {
-        "entries": render_bibliography(conn, document_id),
+        "entries": render_bibliography(conn, document_id, present_control_ids),
         "paragraph_style": sp.paragraph_style_office(profile.get("paragraph_style")),
     }

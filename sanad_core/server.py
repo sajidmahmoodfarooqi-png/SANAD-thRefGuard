@@ -84,6 +84,12 @@ class ScanRequest(BaseModel):
                                                    # (Tier-B R8); read live, never stored
 
 
+class BibliographyBuild(BaseModel):
+    # the citation control ids actually present in the document, so the Core can
+    # drop any citation deleted in Word before rebuilding the reference list
+    present_control_ids: list[str] | None = None
+
+
 class FlagStatusUpdate(BaseModel):
     status: str  # open | confirmed | dismissed
 
@@ -377,6 +383,14 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
     def document_bibliography(document_id: str, conn=Depends(get_conn)):
         # entries + the Office-ready paragraph_style to apply to them (Sprint 6)
         return documents.bibliography_payload(conn, document_id)
+
+    @app.post("/v1/documents/{document_id}/bibliography")
+    def document_bibliography_reconciled(document_id: str, body: BibliographyBuild,
+                                         conn=Depends(get_conn)):
+        # Same payload, but first reconcile the DB against the citation controls
+        # actually present in the document (present_control_ids), so a citation
+        # the user deleted in Word drops out of the reference list.
+        return documents.bibliography_payload(conn, document_id, body.present_control_ids)
 
     # -- integrity scan: Tier-A + Tier-B engine, LIVE ----------------------- #
     @app.post("/v1/documents/{document_id}/scan")
