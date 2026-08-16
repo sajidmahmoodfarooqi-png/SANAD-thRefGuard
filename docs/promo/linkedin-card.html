@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<style>
+  :root{--ink:#12151c;--ink2:#1b2130;--card:#1c2230;--line:#2a3240;--gold:#c9a44f;--jade:#41b898;--paper:#efe8d6;--text:#e7e3d7;--muted:#a6a091}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{width:1200px;height:1200px;overflow:hidden;
+    background:radial-gradient(1100px 700px at 30% -8%,#20273a,var(--ink));
+    color:var(--text);font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{height:1200px;padding:70px 72px;display:flex;flex-direction:column}
+  .row{display:flex;gap:52px;flex:1;align-items:center}
+  .left{flex:1.08;min-width:0}
+  .right{flex:0.92;display:flex;justify-content:center;align-items:center}
+  .brand{display:flex;align-items:center;gap:18px;margin-bottom:30px}
+  .brand img{width:96px;height:96px}
+  .bname{font-family:"Palatino Linotype",Palatino,Georgia,serif;font-weight:700;font-size:46px;letter-spacing:.5px}
+  .bname .ur{color:var(--gold);font-weight:400}
+  .rg{color:var(--gold);font-style:italic;font-size:24px;margin-top:2px}
+  h1{font-size:52px;line-height:1.12;letter-spacing:.2px;margin-bottom:24px}
+  h1 .hl{color:var(--jade)}
+  .sub{font-size:23px;line-height:1.5;color:var(--muted);max-width:600px;margin-bottom:34px}
+  .pills{display:flex;flex-wrap:wrap;gap:12px}
+  .pill{border:1px solid var(--line);background:var(--ink2);border-radius:999px;padding:11px 20px;font-size:20px;color:var(--paper)}
+  .pill b{color:var(--jade);font-weight:600}
+  .shot{width:100%;max-width:470px;border:1px solid var(--line);border-radius:16px;box-shadow:0 40px 90px #000a;background:#fff}
+  .foot{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--line);margin-top:44px;padding-top:26px}
+  .foot .fl{font-size:22px;color:var(--muted)}
+  .foot .fr{font-size:22px;color:var(--gold);font-family:Consolas,ui-monospace,monospace}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row">
+      <div class="left">
+        <div class="brand">
+          <img src="media/seal.png" alt="SANAD" />
+          <div>
+            <div class="bname">SANAD <span class="ur">سند</span></div>
+            <div class="rg">the RefGuard</div>
+          </div>
+        </div>
+        <h1>Is every citation in your thesis <span class="hl">actually right?</span></h1>
+        <p class="sub">A free, open-source companion for Microsoft Word that checks each citation is the right source, in the right place — and <b style="color:var(--paper)">never touches your prose</b>. It runs entirely on your own computer.</p>
+        <div class="pills">
+          <span class="pill"><b>🔒</b> Local-first — no cloud</span>
+          <span class="pill"><b>✓</b> Integrity, not just formatting</span>
+          <span class="pill"><b>🆓</b> Open source</span>
+        </div>
+      </div>
+      <div class="right">
+        <img class="shot" src="media/word-addin.png" alt="SANAD integrity check in Word" />
+      </div>
+    </div>
+    <div class="foot">
+      <span class="fl">Built for researchers &amp; thesis writers · Windows + Microsoft Word</span>
+      <span class="fr">github.com/sajidmahmoodfarooqi-png/SANAD-thRefGuard</span>
+    </div>
+  </div>
+</body>
+</html>
