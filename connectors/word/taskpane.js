@@ -117,16 +117,18 @@ function showTab(name) {
 }
 
 async function pollHealth() {
-  if (DEMO) return;                       // demo mode owns the status line
   const el = $("status");
   const bar = $("demoBar");
   try {
     const h = await core("/v1/health");
-    if (DEMO) return;                     // demo entered while this poll was in flight
+    // A real engine answered — it always wins over preview. This is what lets you
+    // LEAVE demo mode: as soon as the desktop app is reachable (or you Connect a
+    // token), the next poll switches the pane to the live engine automatically.
+    DEMO = false;
     el.className = "status on"; el.innerHTML = `<i></i> working locally · v${esc(h.version)}`;
     if (bar) bar.hidden = true;
   } catch {
-    if (DEMO) return;
+    if (DEMO) return;                     // no engine, but the user chose preview — keep it
     el.className = "status off"; el.innerHTML = `<i></i> Core not running`;
     if (bar) bar.hidden = false;          // offer the sample-data preview
   }
