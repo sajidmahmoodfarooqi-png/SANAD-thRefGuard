@@ -49,6 +49,11 @@ def _is_loopback(address) -> bool:
 
 
 def _check(address):
+    # Boundary note: this gates the TCP *connect* (and create_connection), which is
+    # what any data egress needs — so a guarded document operation cannot upload the
+    # document. It does not gate name resolution itself, so a hostname could in
+    # principle leak via a DNS lookup; that carries no document content and is
+    # outside the threat this guard exists for (the document leaving the machine).
     if _blocked() and not _is_loopback(address):
         raise NetworkEgressBlocked(
             f"network egress blocked during a document-only operation "

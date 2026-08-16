@@ -78,6 +78,12 @@ The add-in puts SANAD *inside* Word — **Insert** a citation, rebuild the **Bib
 | **R7** | Two sources sharing author + year with no a/b suffix |
 | **R8** | A citation dropped into an unrelated sentence — with a closer source suggested. *SANAD suggests, you decide.* |
 
+> **On R8:** the semantic check runs at full strength when the optional
+> `sentence-transformers` model is installed; otherwise it falls back to a lighter
+> word-overlap check. The app and the add-in report which mode is active (the
+> `/v1/health` response carries `semantic_check`), so it never implies a true
+> semantic check when only the fallback is present.
+
 ## Privacy
 
 SANAD is **local-first**: your library is a single file on your machine, the engine listens only on

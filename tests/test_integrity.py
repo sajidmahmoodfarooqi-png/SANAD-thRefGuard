@@ -284,3 +284,42 @@ def test_clean_document_has_no_flags(conn):
     cite(conn, [a], raw="(Rowe, 2004)")
     cite(conn, [b], raw="(Bell, 2016)")
     assert integrity.scan(conn, DOC) == []
+
+
+def test_dismissal_survives_a_message_reword(conn):
+    """The user's dismiss decision must persist even if the flag's *message* text
+    later changes — a code reword, or an edit to the underlying title/year that
+    changes the wording. Suppression is keyed on the finding's identity (rule +
+    citation + reference), not its prose. (Regression: an earlier key of the raw
+    message would resurface every dismissed flag the moment any message changed.)"""
+    rid = add_ref(conn, "The Art of Memory", year=2001, authors=["Fisher"])
+    cite(conn, [rid], raw="(Fisher, 1998)")
+
+    r1 = [f for f in integrity.scan(conn, DOC) if f["rule_id"] == "R1_YEAR_MISMATCH"]
+    assert len(r1) == 1
+    assert integrity.set_flag_status(conn, r1[0]["id"], "dismissed") is True
+
+    # simulate the stored message wording changing out from under us
+    conn.execute("UPDATE integrity_flag SET message = 'entirely new wording' WHERE id = ?",
+                 (r1[0]["id"],))
+    conn.commit()
+
+    after = [f for f in integrity.scan(conn, DOC) if f["rule_id"] == "R1_YEAR_MISMATCH"]
+    assert len(after) == 1                      # not resurrected as a new open flag
+    assert after[0]["status"] == "dismissed"    # the user's decision stands
+
+
+def test_dismissal_is_scoped_to_the_same_finding(conn):
+    """Dismissing one finding must not blanket-suppress the whole rule: a genuinely
+    different finding (different citation + reference) still surfaces."""
+    old = add_ref(conn, "The Art of Memory", year=2001, authors=["Fisher"])
+    cite(conn, [old], raw="(Fisher, 1998)")
+    first = [f for f in integrity.scan(conn, DOC) if f["rule_id"] == "R1_YEAR_MISMATCH"][0]
+    integrity.set_flag_status(conn, first["id"], "dismissed")
+
+    new = add_ref(conn, "A New History", year=2010, authors=["Ortega"])
+    cite(conn, [new], raw="(Ortega, 1999)")
+    open_r1 = [f for f in integrity.scan(conn, DOC)
+               if f["rule_id"] == "R1_YEAR_MISMATCH" and f["status"] == "open"]
+    assert len(open_r1) == 1
+    assert open_r1[0]["suggestion"]["reference_id"] == new

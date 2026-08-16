@@ -59,6 +59,9 @@ def test_health(client):
     assert body["service"] == "sanad-core"
     assert body["version"]
     assert "db_path" not in body  # never leak the library path on the open probe
+    # honestly reports which R8 backend is in effect, so the UI never implies a
+    # true semantic check when only the lexical fallback is installed
+    assert body["semantic_check"] in ("enabled", "lexical-fallback")
 
 
 # -- security --------------------------------------------------------------- #

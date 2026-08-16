@@ -22,9 +22,18 @@ quality downgrade dressed up as the real thing.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import math
 import re
 from collections import OrderedDict
+
+
+def semantic_available() -> bool:
+    """True if the real semantic backend (sentence-transformers) is installed, so
+    R8 runs as a true semantic check rather than the lexical fallback. Cheap and
+    side-effect-free: it only checks the package is importable, never loads a
+    model. Lets the UI and API state honestly which mode is in effect."""
+    return importlib.util.find_spec("sentence_transformers") is not None
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 # function words carry no topic; dropping them keeps the lexical proxy focused on

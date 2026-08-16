@@ -53,6 +53,12 @@ ipcMain.handle("sanad:open-guide", async () => {
   return { ok: !err, error: err || null };
 });
 
+// hand the session token to the renderer synchronously at preload time, over IPC
+// instead of argv — so the secret never appears in the renderer process's command
+// line, where another local process could read it. TOKEN is set in whenReady,
+// before any window (and thus any preload) exists, so it is always populated here.
+ipcMain.on("sanad:token", (e) => { e.returnValue = TOKEN; });
+
 // copy the session token to the clipboard, so the user can paste it into the
 // Word add-in's Connect tab (the one manual step that keeps everything offline)
 ipcMain.handle("sanad:copy", (_e, text) => { clipboard.writeText(String(text || "")); return true; });
@@ -116,13 +122,21 @@ function createWindow(coreReady) {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      additionalArguments: [`--sanad-core=${CORE_URL}`, `--sanad-token=${TOKEN}`],
+      sandbox: true,
+      // Only the (non-secret) Core URL travels via argv. The session token is
+      // delivered over IPC (sanad:token) so it never appears in the renderer
+      // process's command line, where another local process could read it.
+      additionalArguments: [`--sanad-core=${CORE_URL}`],
     },
   });
   win.removeMenu();
-  // open external links in the system browser, never in-app
+  // open external links in the system browser, never in-app — and only http(s),
+  // so a crafted file:/other-scheme link can never be handed to the OS to open.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    try {
+      const proto = new URL(url).protocol;
+      if (proto === "http:" || proto === "https:") shell.openExternal(url);
+    } catch (_) { /* malformed or unsafe URL: ignore */ }
     return { action: "deny" };
   });
   // never let a dropped file (or stray link) navigate away from the app shell

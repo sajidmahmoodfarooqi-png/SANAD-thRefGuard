@@ -485,16 +485,37 @@ def _row_to_flag(row: sqlite3.Row) -> dict:
     }
 
 
+def _identity_key(rule_id: str, citation_id, suggestion) -> tuple:
+    """A stable identity for a finding, independent of its human-readable message
+    wording and of any transient metric (similarity %, counts). Two scans that
+    flag the *same* problem produce the same key even if the message text later
+    changes — in code, or because the underlying title/year was edited — so a
+    user's confirm/dismiss decision is never silently undone by a reworded
+    message. Identity = the rule, the citation it's attached to (if any), and the
+    set of reference ids the finding is about."""
+    sug = suggestion or {}
+    rids: list[str] = []
+    if sug.get("reference_id"):
+        rids.append(str(sug["reference_id"]))
+    for r in (sug.get("reference_ids") or []):
+        rids.append(str(r))
+    return (rule_id, citation_id or "", tuple(sorted(set(rids))))
+
+
 def persist_flags(conn: sqlite3.Connection, document_id: str, flags: list[dict]) -> None:
     """Replace this document's *open* flags with a fresh scan, while respecting
     the user's prior decisions: a finding the user already `confirmed` or
     `dismissed` is not re-created as a new open flag on re-scan."""
     resolved = conn.execute(
-        "SELECT rule_id, IFNULL(citation_id,'') cid, message FROM integrity_flag "
+        "SELECT rule_id, IFNULL(citation_id,'') cid, suggestion FROM integrity_flag "
         "WHERE document_id = ? AND status IN ('confirmed','dismissed')",
         (document_id,),
     ).fetchall()
-    suppressed = {(r["rule_id"], r["cid"], r["message"]) for r in resolved}
+    suppressed = {
+        _identity_key(r["rule_id"], r["cid"],
+                      json.loads(r["suggestion"]) if r["suggestion"] else None)
+        for r in resolved
+    }
 
     conn.execute(
         "DELETE FROM integrity_flag WHERE document_id = ? AND status = 'open'",
@@ -502,8 +523,7 @@ def persist_flags(conn: sqlite3.Connection, document_id: str, flags: list[dict])
     )
     now = db.now_iso()
     for f in flags:
-        key = (f["rule_id"], f["citation_id"] or "", f["message"])
-        if key in suppressed:
+        if _identity_key(f["rule_id"], f["citation_id"], f["suggestion"]) in suppressed:
             continue
         conn.execute(
             "INSERT INTO integrity_flag "

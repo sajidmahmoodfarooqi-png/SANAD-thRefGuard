@@ -29,7 +29,7 @@ import urllib.request
 
 CROSSREF = "https://api.crossref.org/works/"
 # A polite User-Agent per Crossref etiquette. No personal data.
-_UA = "SANAD-RefGuard (https://gpgcam.edu.pk; local citation tool)"
+_UA = "SANAD-RefGuard (https://github.com/sajidmahmoodfarooqi-png/SANAD-thRefGuard; local citation tool)"
 
 _TYPE_MAP = {
     "journal-article": "article-journal",

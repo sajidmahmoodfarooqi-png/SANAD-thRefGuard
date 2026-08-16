@@ -240,8 +240,12 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
     # -- health (unauthenticated liveness; reveals nothing sensitive) -------- #
     @app.get("/v1/health")
     def health():
+        # semantic_check reports which R8 backend is in effect so the UI never
+        # implies a true semantic check when only the lexical fallback is present.
         return {"status": "ok", "service": "sanad-core", "version": __version__,
-                "auth": "required"}
+                "auth": "required",
+                "semantic_check": "enabled" if embedding.semantic_available()
+                else "lexical-fallback"}
 
     # -- library ------------------------------------------------------------ #
     @app.get("/v1/library/search")
