@@ -186,8 +186,31 @@ async function insertBibliography() {
   if (DEMO) {
     data = { entries: DEMO_REFS.filter((r) => demoCited.has(r.id)).map((r) => r.entry), paragraph_style: {} };
   } else {
-    try { data = await core(`/v1/documents/${docId()}/bibliography`); }
-    catch (e) { return (msg.innerHTML = `<p class="muted">Couldn't build it: ${esc(e.message)}</p>`); }
+    // Enumerate the citation controls actually present in the document, so the
+    // Core drops any citation the user deleted in Word before rebuilding the list.
+    // IMPORTANT: only send the present-set if we actually read it — sending an
+    // empty set on a failed read would tell the Core to prune every citation.
+    let present = [], gathered = false;
+    try {
+      await Word.run(async (ctx) => {
+        const ccs = ctx.document.contentControls;
+        ccs.load("items/tag,items/title");
+        await ctx.sync();
+        present = ccs.items.filter((c) => c.tag === "sanad-cite").map((c) => c.title);
+      });
+      gathered = true;
+    } catch (_) { gathered = false; }   // couldn't read controls -> don't reconcile
+
+    const url = `/v1/documents/${docId()}/bibliography`;
+    try {
+      data = gathered
+        ? await core(url, { method: "POST", body: JSON.stringify({ present_control_ids: present }) })
+        : await core(url);
+    } catch (e) {
+      // older Core without the POST route (405): fall back to the plain GET build
+      try { data = await core(url); }
+      catch (e2) { return (msg.innerHTML = `<p class="muted">Couldn't build it: ${esc(e2.message)}</p>`); }
+    }
   }
   const entries = data.entries || [];
   const ps = data.paragraph_style || {};
