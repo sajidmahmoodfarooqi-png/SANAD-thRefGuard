@@ -32,7 +32,7 @@
   </div>
 
   <section class="tab-body" id="insert">
-    <div class="search"><input id="q" type="search" placeholder="Search your library" /></div>
+    <div class="search"><input id="q" type="search" autocomplete="off" placeholder="Search your library" /></div>
     <div class="results" id="results"><p class="muted">Type to search your local library, then insert a citation at the cursor.</p></div>
   </section>
 
@@ -49,7 +49,7 @@
 
   <section class="tab-body" id="connect" hidden>
     <p class="muted">The SANAD desktop app must be running. Paste its session token once (Settings in the desktop app, or the <code>sanad.token</code> file next to your library). It's stored with this document only.</p>
-    <div class="search"><input id="token" type="password" placeholder="Paste SANAD token" /></div>
+    <div class="search"><input id="token" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="sanad-session-token" data-lpignore="true" data-1p-ignore data-form-type="other" placeholder="Paste SANAD token" /></div>
     <button class="btn primary" id="saveTokenBtn">Connect</button>
     <div class="flags" id="connectMsg"></div>
     <div class="demo-block">
