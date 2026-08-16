@@ -66,7 +66,7 @@ jobs:
         run: python packaging/extract_release_notes.py "${GITHUB_REF_NAME#v}" > RELEASE_BODY.md
 
       - name: Upload installer as a build artifact (always)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: SANAD-Setup
           path: app/dist/*.exe
