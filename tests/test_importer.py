@@ -340,3 +340,105 @@ ER  -
     assert len(ids) == 1   # the malformed record was skipped, not the whole import
     row = conn.execute("SELECT title FROM reference").fetchone()
     assert row["title"] == "A genuine paper title with real content"
+
+
+# --------------------------------------------------------------------------- #
+# DOI repair-or-remove for malformed (DOI/URL-as-title) entries
+# (documents.repair_or_remove_malformed) — resolve via Crossref or delete.
+# --------------------------------------------------------------------------- #
+
+def test_extract_doi_from_url_bare_and_field():
+    assert importer.extract_doi("https://doi.org/10.1016/j.rama.2024.04.010") == "10.1016/j.rama.2024.04.010"
+    assert importer.extract_doi("10.1234/abc.def") == "10.1234/abc.def"
+    assert importer.extract_doi(None, "", "see 10.5555/xyz).") == "10.5555/xyz"
+    assert importer.extract_doi("just a normal title") is None
+
+
+def test_title_is_bare_locator():
+    assert importer.title_is_bare_locator("https://doi.org/10.1/x", []) is True
+    assert importer.title_is_bare_locator("10.1016/j.rama.2024.04.010", []) is True
+    assert importer.title_is_bare_locator("512149", []) is True          # bare number
+    assert importer.title_is_bare_locator("A real paper title", []) is False
+    assert importer.title_is_bare_locator("https://doi.org/10.1/x",
+                                          [{"family": "Doe"}]) is False   # has an author
+
+
+def _seed_malformed(conn, title):
+    # a DOI/URL-as-title entry with no author enters via insert_reference (the
+    # narrow import guard doesn't catch a full URL) — exactly how it got in live
+    rid = importer.insert_reference(conn, {"title": title, "item_type": "article-journal"}, [])
+    assert rid is not None
+    conn.commit()
+    return rid
+
+
+def _crossref_ok(url):
+    return {"message": {"title": ["Recovered Real Title"],
+                        "author": [{"family": "Ortega", "given": "Pablo"}],
+                        "issued": {"date-parts": [[2020]]},
+                        "container-title": ["Journal of Systems Engineering"],
+                        "type": "journal-article", "DOI": "10.1016/j.rama.2024.04.010"}}
+
+
+def test_repair_resolves_malformed_via_doi():
+    from sanad_core import documents
+    conn = db.connect()
+    rid = _seed_malformed(conn, "https://doi.org/10.1016/j.rama.2024.04.010")
+    out = documents.repair_or_remove_malformed(conn, fetch=_crossref_ok)
+    assert out["repaired"] == 1 and out["removed"] == 0 and out["skipped"] == 0
+    row = conn.execute("SELECT title, doi FROM reference WHERE id = ?", (rid,)).fetchone()
+    assert row is not None                       # same id, repaired in place
+    assert row["title"] == "Recovered Real Title"
+    auth = conn.execute("SELECT COUNT(*) c FROM reference_author WHERE reference_id = ?", (rid,)).fetchone()
+    assert auth["c"] == 1
+
+
+def test_repair_removes_when_doi_does_not_resolve():
+    from sanad_core import documents
+    conn = db.connect()
+    rid = _seed_malformed(conn, "https://doi.org/10.9999/nope")
+    out = documents.repair_or_remove_malformed(conn, fetch=lambda url: {})   # no message
+    assert out["removed"] == 1 and out["repaired"] == 0
+    assert conn.execute("SELECT 1 FROM reference WHERE id = ?", (rid,)).fetchone() is None
+
+
+def test_repair_removes_when_no_doi_present():
+    from sanad_core import documents
+    conn = db.connect()
+    rid = _seed_malformed(conn, "https://example.org/some-page")   # URL, but no DOI in it
+    called = []
+    out = documents.repair_or_remove_malformed(conn, fetch=lambda url: called.append(url) or {})
+    assert out["removed"] == 1 and not called          # deleted without any network call
+    assert conn.execute("SELECT 1 FROM reference WHERE id = ?", (rid,)).fetchone() is None
+
+
+def test_repair_skips_on_network_error_never_deletes():
+    from sanad_core import documents
+    import urllib.error
+    conn = db.connect()
+    rid = _seed_malformed(conn, "https://doi.org/10.1016/j.rama.2024.04.010")
+
+    def boom(url):
+        raise urllib.error.URLError("offline")
+
+    out = documents.repair_or_remove_malformed(conn, fetch=boom)
+    assert out["skipped"] == 1 and out["removed"] == 0 and out["repaired"] == 0
+    assert conn.execute("SELECT 1 FROM reference WHERE id = ?", (rid,)).fetchone() is not None
+
+
+def test_repair_leaves_real_references_untouched():
+    from sanad_core import documents
+    conn = db.connect()
+    good = importer.insert_reference(
+        conn, {"title": "A perfectly good paper", "year": 2019, "item_type": "article-journal"},
+        [{"family": "Fisher"}])
+    conn.commit()
+
+    def must_not_call(url):
+        raise AssertionError("should not resolve a healthy reference")
+
+    out = documents.repair_or_remove_malformed(conn, fetch=must_not_call)
+    assert out == {"repaired": 0, "removed": 0, "skipped": 0,
+                   "details": {"repaired": [], "removed": [], "skipped": []}}
+    assert conn.execute("SELECT title FROM reference WHERE id = ?", (good,)).fetchone()["title"] \
+        == "A perfectly good paper"

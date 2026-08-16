@@ -203,8 +203,7 @@ def library_health(conn: sqlite3.Connection) -> dict:
         own sort+delete tool only."""
     from difflib import SequenceMatcher
 
-    from .importer import (looks_like_malformed_bare_reference, normalize_doi,
-                           normalize_title)
+    from .importer import (normalize_doi, normalize_title, title_is_bare_locator)
 
     rows = conn.execute("SELECT id, title, year, doi FROM reference").fetchall()
     total = len(rows)
@@ -217,7 +216,7 @@ def library_health(conn: sqlite3.Connection) -> dict:
     malformed = [
         {"id": r["id"], "title": r["title"], "year": r["year"]}
         for r in rows
-        if looks_like_malformed_bare_reference(
+        if title_is_bare_locator(
             r["title"], [{}] * author_count.get(r["id"], 0))
     ]
 
@@ -423,6 +422,62 @@ def delete_reference(conn: sqlite3.Connection, ref_id: str) -> dict:
     conn.execute("DELETE FROM reference WHERE id = ?", (ref_id,))
     conn.commit()
     return {"deleted": 1, "library_size": count_library(conn)}
+
+
+def repair_or_remove_malformed(conn: sqlite3.Connection, fetch=None) -> dict:
+    """For every malformed entry (title is really just a DOI/URL, no author):
+    try to REPAIR it by resolving its DOI on Crossref and rewriting it in place;
+    if it has no resolvable DOI, or Crossref returns nothing for it, DELETE it.
+    An entry we simply couldn't reach Crossref for is left untouched and reported
+    as skipped (never deleted on a mere connectivity blip). Requires internet;
+    this is the one library action that is deliberately online.
+
+    `fetch(url) -> dict` is injectable for testing; it defaults to the resolver's
+    Crossref fetch."""
+    import urllib.error
+    import urllib.parse
+
+    from . import resolver
+    from .importer import extract_doi, title_is_bare_locator, update_reference
+    from .offline import NetworkEgressBlocked
+
+    fetch = fetch or resolver._default_fetch
+    author_count = {
+        r["reference_id"]: r["c"] for r in conn.execute(
+            "SELECT reference_id, COUNT(*) c FROM reference_author GROUP BY reference_id")
+    }
+    rows = conn.execute("SELECT id, title, doi, url FROM reference").fetchall()
+
+    repaired, removed, skipped = [], [], []
+    for r in rows:
+        authors_stub = [{}] * author_count.get(r["id"], 0)
+        if not title_is_bare_locator(r["title"], authors_stub):
+            continue
+        doi = extract_doi(r["doi"], r["url"], r["title"])
+        if not doi:
+            delete_reference(conn, r["id"])
+            removed.append({"id": r["id"], "was": r["title"], "reason": "no DOI to resolve"})
+            continue
+        try:
+            data = fetch(resolver.CROSSREF + urllib.parse.quote(doi))
+        except (NetworkEgressBlocked, urllib.error.URLError, TimeoutError, OSError):
+            skipped.append({"id": r["id"], "doi": doi, "reason": "couldn't reach Crossref"})
+            continue
+        msg = (data or {}).get("message")
+        if msg:
+            fields, authors = resolver.crossref_message_to_fields(msg)
+            fields["doi"] = doi
+            fields["resolution_src"] = "crossref"
+            update_reference(conn, r["id"], fields, authors)
+            repaired.append({"id": r["id"], "doi": doi, "title": fields.get("title")})
+        else:
+            delete_reference(conn, r["id"])
+            removed.append({"id": r["id"], "was": r["title"], "reason": "DOI did not resolve"})
+
+    return {
+        "repaired": len(repaired), "removed": len(removed), "skipped": len(skipped),
+        "details": {"repaired": repaired, "removed": removed, "skipped": skipped},
+    }
 
 
 # words that are citation punctuation, not something stored in the library, so

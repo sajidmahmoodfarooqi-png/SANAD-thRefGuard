@@ -260,7 +260,8 @@ async function loadHealth() {
   const malformedHtml = h.malformed.length ? `
     <div class="panel" style="margin-bottom:20px">
       <div class="ph">Malformed entries (${h.malformed.length})</div>
-      <p style="font-size:13px;color:var(--muted);padding:0 15px 10px">A bare DOI or number sitting in the title field, with no real author or content — import artifacts from before SANAD started rejecting these at import. Safe to delete.</p>
+      <p style="font-size:13px;color:var(--muted);padding:0 15px 10px">A bare DOI or URL sitting in the title field, with no real author or content — import artifacts. <b>Repair or remove</b> tries to rebuild each one from its DOI (via Crossref — needs internet); any that can't be resolved are deleted. You can also delete one individually.</p>
+      <div style="padding:0 15px 12px"><button class="btn small primary" id="healthRepairBtn" style="width:auto">Repair or remove via DOI (online)</button> <span id="healthRepairMsg" style="font-size:12.5px;color:var(--muted)"></span></div>
       <div id="healthMalformedList"></div>
     </div>` : "";
 
@@ -284,6 +285,25 @@ async function loadHealth() {
       const m = h.malformed.find((x) => x.id === btn.dataset.del);
       if (m) deleteReference(m, loadHealth);
     }));
+    const repairBtn = $("healthRepairBtn"), repairMsg = $("healthRepairMsg");
+    if (repairBtn) repairBtn.addEventListener("click", async () => {
+      repairBtn.disabled = true;
+      repairMsg.textContent = "Resolving via Crossref…";
+      try {
+        const r = await api("/v1/library/repair-malformed", { method: "POST" });
+        const parts = [];
+        if (r.repaired) parts.push(`${r.repaired} repaired`);
+        if (r.removed) parts.push(`${r.removed} removed`);
+        if (r.skipped) parts.push(`${r.skipped} skipped (no connection)`);
+        toast(parts.length ? parts.join(" · ") : "Nothing to repair");
+      } catch (e) {
+        repairMsg.textContent = "";
+        toast("Couldn't reach the Core to repair: " + e.message);
+        repairBtn.disabled = false;
+        return;
+      }
+      loadHealth();
+    });
   }
 
   if (h.near_duplicate_groups.length) {

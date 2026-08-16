@@ -267,6 +267,13 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
     def library_deduplicate(conn=Depends(get_conn)):
         return documents.deduplicate_library(conn)
 
+    @app.post("/v1/library/repair-malformed")
+    def library_repair_malformed(conn=Depends(get_conn)):
+        # Repair-or-remove for malformed (DOI/URL-as-title) entries. Deliberately
+        # ONLINE (resolves DOIs on Crossref) -- the one library action that needs
+        # the network -- so it is NOT wrapped in offline.no_network().
+        return documents.repair_or_remove_malformed(conn)
+
     @app.get("/v1/library")
     def library_list(q: str = "", limit: int = 200, offset: int = 0,
                      sort: str = "year", conn=Depends(get_conn)):

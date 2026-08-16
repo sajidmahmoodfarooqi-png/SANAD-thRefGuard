@@ -439,6 +439,44 @@ def looks_like_malformed_bare_reference(title: object, authors: list[dict]) -> b
     return bool(_BARE_DOI_TITLE.match(t) or _BARE_NUMBER_TITLE.match(t))
 
 
+# A DOI anywhere in a string (title, url, or the doi field). Matches the modern
+# DOI form 10.NNNN/suffix; used to recover a resolvable DOI from an entry whose
+# "title" is really just a DOI or a doi.org URL.
+_DOI_ANYWHERE = re.compile(r"10\.\d{4,9}/[^\s\"'<>]+", re.I)
+
+
+def extract_doi(*texts: object) -> str | None:
+    """Pull the first resolvable DOI out of any of the given strings (checked in
+    order — typically the doi field, then url, then title). Trims trailing
+    punctuation a URL/citation often leaves on the end. Returns it normalized, or
+    None if none is present."""
+    for t in texts:
+        if not t:
+            continue
+        m = _DOI_ANYWHERE.search(str(t))
+        if m:
+            return normalize_doi(m.group(0).rstrip(".,);]"))
+    return None
+
+
+def title_is_bare_locator(title: object, authors: list[dict]) -> bool:
+    """Broader than looks_like_malformed_bare_reference: also true when the title
+    is essentially just a DOI or a URL (e.g. 'https://doi.org/10.x/y') with no
+    author — the import-artifact class that is *repairable* by resolving its DOI.
+    Used by Library Health + the repair-or-remove action, not the import guard."""
+    if authors:
+        return False
+    if looks_like_malformed_bare_reference(title, authors):
+        return True
+    t = str(title or "").strip()
+    if not t or " " in t:
+        return False   # a real title has spaces; a bare locator never does
+    low = t.lower()
+    if low.startswith(("http://", "https://", "doi.org/", "dx.doi.org/", "www.")):
+        return True
+    return bool(_DOI_ANYWHERE.fullmatch(t))   # the whole title is a bare DOI
+
+
 def insert_reference(conn: sqlite3.Connection, fields: dict, authors: list[dict]) -> str | None:
     """Insert one reference + its authors. Dedupes on DOI first, then on an
     exact full-content signature for references with no DOI at all -- so
@@ -505,6 +543,44 @@ def insert_reference(conn: sqlite3.Connection, fields: dict, authors: list[dict]
                 "VALUES (?, ?, ?, 'author')",
                 (ref_id, author_id, pos),
             )
+    return ref_id
+
+
+def update_reference(conn: sqlite3.Connection, ref_id: str, fields: dict,
+                     authors: list[dict]) -> str:
+    """Overwrite an existing reference's fields + authors in place (by id) and
+    rebuild its CSL JSON and content signature. Used to repair a malformed entry
+    with freshly-resolved metadata — the row keeps its id (so citations pointing
+    at it stay valid) but becomes a real, complete reference."""
+    fields = {**fields, "doi": normalize_doi(fields.get("doi"))}
+    sig = content_signature(fields, authors)
+    csl = csl_json.build_csl_json({**fields, "id": ref_id}, authors)
+    now = db.now_iso()
+    conn.execute(
+        """UPDATE reference SET item_type=?, title=?, container_title=?, year=?,
+           year_suffix=?, volume=?, issue=?, pages=?, publisher=?, doi=?, isbn=?,
+           url=?, abstract=?, language=?, raw_source_text=?, resolution_src=?,
+           confidence=?, csl_json=?, content_sig=?, updated_at=? WHERE id=?""",
+        (
+            fields.get("item_type", "article-journal"), fields.get("title", ""),
+            fields.get("container_title"), fields.get("year"), fields.get("year_suffix"),
+            fields.get("volume"), fields.get("issue"), fields.get("pages"),
+            fields.get("publisher"), fields.get("doi"), fields.get("isbn"),
+            fields.get("url"), fields.get("abstract"), fields.get("language"),
+            fields.get("raw_source_text"), fields.get("resolution_src", "crossref"),
+            fields.get("confidence"), csl_json.dumps(csl), sig, now, ref_id,
+        ),
+    )
+    conn.execute("DELETE FROM reference_author WHERE reference_id = ?", (ref_id,))
+    for pos, author in enumerate(authors):
+        author_id = find_or_create_author(conn, author)
+        if author_id:
+            conn.execute(
+                "INSERT OR IGNORE INTO reference_author (reference_id, author_id, position, role) "
+                "VALUES (?, ?, ?, 'author')",
+                (ref_id, author_id, pos),
+            )
+    conn.commit()
     return ref_id
 
 
