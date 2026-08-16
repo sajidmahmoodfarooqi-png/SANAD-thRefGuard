@@ -5,7 +5,7 @@
 citeproc-py>=0.6,<1            # CSL rendering engine
 citeproc-py-styles>=0.1,<1     # bundled CSL styles (APA 7th et al.)
 fastapi>=0.100,<1              # local HTTP service (add-in <-> core protocol)
-uvicorn>=0.20,<1               # ASGI server for FastAPI
+uvicorn>=0.52.2,<1               # ASGI server for FastAPI
 websockets>=11,<16              # uvicorn's WebSocket impl, for the /v1/events channel
 pydantic>=2,<3                 # request/response models
 openpyxl>=3.1,<4               # Excel (.xlsx) reference-list import
