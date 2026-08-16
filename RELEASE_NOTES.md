@@ -1,5 +1,22 @@
 # Release notes
 
+## v0.2.11 — your review decisions stick, and honest about the semantic check
+
+- **Your “reviewed” decisions on citation flags now stick for good.** Previously,
+  if a flag's wording changed — because we improved the message, or because you
+  edited the underlying title or year — a flag you'd already dismissed or
+  confirmed could quietly reappear as new. Now SANAD remembers a decision by the
+  *finding itself* (which rule, which citation, which source), so your choices
+  survive edits and updates.
+- **Honest about the context check.** SANAD now clearly reports whether the
+  "cited out of context" check (R8) is running as a full semantic check or the
+  lighter word-overlap fallback, so it never implies more than it's doing.
+- **Security & robustness hardening** under the hood: the desktop app keeps its
+  local session token off the process command line, only opens normal web links
+  externally, and runs its window in a stricter sandbox. Dependencies are capped
+  against surprise breaking updates.
+- The Word add-in is unchanged in this release.
+
 ## v0.2.10 — the seal is the icon now, and you can actually see it
 
 - **The ornate SANAD seal is now the app icon** on your Desktop and Taskbar, and
