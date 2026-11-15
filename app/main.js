@@ -167,11 +167,16 @@ app.whenReady().then(async () => {
   if (!isFirstInstance) return;
   TOKEN = loadOrCreateToken();     // stable token (needs userData, so set here)
   startCore();
-  const ready = await waitForCore();
-  createWindow(ready);
+  // Open the window straight away instead of waiting for the Core. The installed
+  // Core is a one-file program that unpacks itself on every launch — measured at
+  // about 50 seconds on an ordinary laptop — and the old 25-second wait meant no
+  // window at all for 25 seconds, then one that said "Core not reachable". The
+  // window now says the engine is starting and connects by itself when it is up.
+  createWindow(false);
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow(ready);
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(coreProc !== null);
   });
+  waitForCore(180000).then((ok) => console.log(ok ? "[core] ready" : "[core] did not answer within 3 minutes"));
 });
 
 function stopCore() {

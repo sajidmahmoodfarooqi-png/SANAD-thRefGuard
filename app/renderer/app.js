@@ -90,6 +90,16 @@ function go(id) {
 document.querySelectorAll("[data-screen]").forEach((b) => b.addEventListener("click", () => go(b.getAttribute("data-screen"))));
 
 // --- Core health (live status) --------------------------------------------- //
+// The window opens as soon as SANAD is launched, while the engine is still
+// starting: the installed engine unpacks itself on every launch and can take the
+// better part of a minute on an ordinary laptop. Until it has answered once we
+// say "starting" (not "not reachable", which reads as a fault), check every
+// second, and the moment it answers fill in whatever the screen is showing.
+const BOOT_AT = Date.now();
+const STARTUP_GRACE_MS = 180000;   // after this long with no answer it really is a fault
+let coreUp = false;                // is the engine answering right now?
+let coreEverUp = false;            // has it answered at least once since launch?
+
 async function pollHealth() {
   try {
     const h = await api("/v1/health");
@@ -100,13 +110,30 @@ async function pollHealth() {
     $("coreCardState").textContent = "running · library + integrity engine";
     $("aboutVer").textContent = h.version || "—";
     $("setCoreState").textContent = "running";
+    if (!coreUp) { coreUp = true; coreEverUp = true; onCoreConnected(); }
   } catch {
-    $("coreStatus").className = "live off";
-    $("coreStatusText").textContent = "Core not reachable";
+    coreUp = false;
+    const starting = !coreEverUp && Date.now() - BOOT_AT < STARTUP_GRACE_MS;
+    $("coreStatus").className = starting ? "live" : "live off";
+    $("coreStatusText").textContent = starting ? "Starting the engine…" : "Core not reachable";
     $("coreCard").className = "corecard";
-    $("coreCardState").textContent = "not connected";
-    $("setCoreState").textContent = "not connected";
+    $("coreCardState").textContent = starting ? "starting — this can take up to a minute" : "not connected";
+    $("setCoreState").textContent = starting ? "starting…" : "not connected";
   }
+}
+
+// The engine has just come up (first start, or back after a drop): load the Home
+// numbers and re-load the screen in view, which could only show "not reachable"
+// while the engine was down.
+function onCoreConnected() {
+  refreshHomeStats();
+  const shown = document.querySelector(".screen:not([hidden])");
+  if (shown && ["library", "style", "health"].includes(shown.id)) go(shown.id);
+}
+
+async function healthLoop() {
+  await pollHealth();
+  setTimeout(healthLoop, coreUp ? 5000 : 1000);
 }
 
 // --- library --------------------------------------------------------------- //
@@ -1041,6 +1068,7 @@ async function refreshHomeStats() {
 }
 
 // --- boot ------------------------------------------------------------------ //
-pollHealth();
-refreshHomeStats();
-setInterval(pollHealth, 5000);
+// healthLoop() checks the engine now, then every second until it answers and
+// every five seconds after that; Home's numbers load on the first answer
+// (onCoreConnected), so they no longer stay at "—" when the engine starts slowly.
+healthLoop();

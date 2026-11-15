@@ -333,6 +333,15 @@ files saved as Windows-1252 or UTF-16 were read as UTF-8 (garbled names).
   Windows the Core's whole process tree is stopped on exit and before
   "Regenerate token" restarts (a surviving Core kept the old token).
 
+- **Start-up (found when the installer was built):** the installed Core takes
+  about 50 seconds to answer on an ordinary laptop (measured three times, idle),
+  but the app waited only 25 — with no window at all meanwhile — and then opened
+  on "Core not reachable", with Home's numbers stuck at "—". The window now
+  opens at once, says the engine is starting, checks every second, and fills in
+  the screen the moment the engine answers. Checked in a real browser page with
+  the engine off, then started. The 50 seconds itself is the one-file Core
+  unpacking on every launch; see 9.6 item 6.
+
 ### 9.6 Not changed — owner decisions and residual risk
 1. **Undo after a list rebuild.** If a citation is deleted in Word, the list is
    rebuilt, and the deletion is then undone, the restored control has no record
@@ -349,3 +358,9 @@ files saved as Windows-1252 or UTF-16 were read as UTF-8 (garbled names).
 5. **Earlier demo runs** may have left three sample sources ("The Art of Memory",
    "Tides and the lunar cycle", "Consumer credit and interest rates") in an
    existing library; they are not removed automatically.
+6. **Slow engine start (~50 s).** The Core is packaged as a single file that
+   unpacks ~140 MB to a temporary folder on every launch. Packaging it as a
+   folder instead (PyInstaller "onedir") would remove that step and should bring
+   start-up down to a few seconds; it changes the build scripts, the installer
+   layout and the CI checks on all three systems, so it is left as a separate
+   piece of work.

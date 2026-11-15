@@ -29,8 +29,11 @@ problem below was reproduced first, then fixed, and is now covered by a test.
 - **Word add-in.** Inserting a citation while a word is highlighted no longer
   replaces that word; the citation is placed after it. The reference list now
   follows the line spacing set in your style profile.
-- **Desktop app.** Error messages say what went wrong instead of showing a
-  status code. Opening SANAD a second time brings the existing window forward.
+- **Desktop app.** The window now opens as soon as you launch SANAD and tells
+  you the engine is starting, instead of showing nothing and then "Core not
+  reachable"; it connects by itself when the engine is ready (this can take up
+  to a minute). Error messages say what went wrong instead of showing a status
+  code. Opening SANAD a second time brings the existing window forward.
 
 The full list, with the cause of each problem, is in `docs/AUDIT.md` section 9.
 
