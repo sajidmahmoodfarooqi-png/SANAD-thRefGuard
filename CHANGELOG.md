@@ -21,8 +21,9 @@ Full findings: [docs/AUDIT.md §9](docs/AUDIT.md). 43 new regression tests (suit
   text instead of flagging every Urdu citation, and stays silent where it cannot judge.
 - **Word add-in:** inserting a citation can no longer replace highlighted text; the profile's line
   spacing is applied to the reference list.
-- **Desktop app:** the window opens at once and says the engine is starting (the packaged Core takes
-  ~50 s to answer; the app used to wait 25 s with no window, then show "Core not reachable").
+- **Desktop app:** the engine starts in a second or two instead of ~50 s — the Core is now packaged
+  as a folder, so nothing is unpacked at each launch. The window also opens at once and says the
+  engine is starting (the app used to wait 25 s with no window, then show "Core not reachable").
 - **API:** `DELETE /v1/documents/{id}`; `POST /v1/library/import` also returns the `ids` it created.
 
 ## [0.2.10] — the seal is the icon now, and you can see it
