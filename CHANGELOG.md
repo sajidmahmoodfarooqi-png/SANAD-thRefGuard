@@ -6,7 +6,7 @@ Notable changes per release. Full user-facing notes are in
 This project uses semantic-ish `vMAJOR.MINOR.PATCH` tags; each tag builds and publishes a Windows
 installer via CI.
 
-## [Unreleased] — diagnostic audit: crash, data-loss and import fixes
+## [0.2.13] — diagnostic audit: crash, data-loss and import fixes
 Full findings: [docs/AUDIT.md §9](docs/AUDIT.md). 43 new regression tests (suite 218 → 261).
 - **Fixed failures:** the integrity check on a document with an unrecorded citation control;
   "Update reference list" after deleting a flagged citation in Word; deleting a style profile a

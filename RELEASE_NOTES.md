@@ -1,5 +1,39 @@
 # Release notes
 
+## v0.2.13 — a full audit: nothing lost, nothing silently dropped
+
+This release comes out of a line-by-line audit of the whole program. Every
+problem below was reproduced first, then fixed, and is now covered by a test.
+
+- **Things that used to fail now work.** The integrity check no longer stops
+  when your document has a citation SANAD has no record of (it reports it,
+  which was always the point). "Update reference list" works after you delete a
+  flagged citation in Word. A style profile can be deleted even if a document is
+  using it. One odd row — a year of "n.d.", a missing title — no longer stops a
+  whole import.
+- **Your references are safer.** Two different Urdu titles are no longer
+  mistaken for duplicates. Different pieces that share a title such as
+  "Introduction" or "Editorial" are no longer merged automatically; they are
+  listed under Library health for you to decide. Importing a bare row (title and
+  DOI only) no longer blanks the authors and abstract of a complete record you
+  already had. The demo check no longer leaves sample sources in your library.
+- **Imports read more of what you give them.** RIS and BibTeX files from more
+  databases, CSV files saved by Excel (including semicolon-separated ones),
+  typed lists numbered `1)` or `[1]` or not numbered at all, author cells typed
+  the way a reference list prints them, and text files saved in older Windows
+  encodings.
+- **Style and Urdu.** The "use 'and' instead of '&'" option in the style builder
+  now takes effect. The context check reads Urdu text; before, it flagged every
+  citation in an Urdu sentence. Where it cannot judge — an Urdu sentence citing
+  an English paper — it now says nothing rather than raising a false alarm.
+- **Word add-in.** Inserting a citation while a word is highlighted no longer
+  replaces that word; the citation is placed after it. The reference list now
+  follows the line spacing set in your style profile.
+- **Desktop app.** Error messages say what went wrong instead of showing a
+  status code. Opening SANAD a second time brings the existing window forward.
+
+The full list, with the cause of each problem, is in `docs/AUDIT.md` section 9.
+
 ## v0.2.12 — cleaner library, truer bibliography, smarter search
 
 - **Repair or remove malformed references.** Library health can now fix entries
