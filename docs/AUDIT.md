@@ -339,8 +339,23 @@ files saved as Windows-1252 or UTF-16 were read as UTF-8 (garbled names).
   on "Core not reachable", with Home's numbers stuck at "—". The window now
   opens at once, says the engine is starting, checks every second, and fills in
   the screen the moment the engine answers. Checked in a real browser page with
-  the engine off, then started. The 50 seconds itself is the one-file Core
-  unpacking on every launch; see 9.6 item 6.
+  the engine off, then started. The 50 seconds itself was the one-file Core
+  unpacking on every launch.
+- **Start-up delay removed (follow-up to the item above):** the Core is now
+  packaged as a folder (PyInstaller "onedir") instead of one self-unpacking
+  file, so nothing is unpacked at launch. Measured on the same laptop, idle,
+  three launches in a row of the packaged Core, from process start to
+  `/v1/health` answering: **1.25 s, 1.07 s, 1.07 s** (before: 48.8 s, 49.9 s,
+  50.0 s). Stopping it the way the app does leaves nothing listening on the
+  port; the Core is now a single process rather than a launcher plus a child.
+  The packaged Core was also exercised end to end (import from BibTeX, Excel
+  and Word, a rendered citation and reference list, the style list — 8 checks,
+  all passing). The Windows installer went from 215.9 MB to 194.9 MB; the
+  installed Core is a folder of about 13,400 files (mostly citation styles), so
+  installing takes a little longer than before. The first launch after a
+  restart of the computer was not timed and may take a few seconds longer.
+  CI now starts the frozen Core on Linux, Windows and macOS and waits for it to
+  answer, instead of only checking that the file exists.
 
 ### 9.6 Not changed — owner decisions and residual risk
 1. **Undo after a list rebuild.** If a citation is deleted in Word, the list is
@@ -358,9 +373,8 @@ files saved as Windows-1252 or UTF-16 were read as UTF-8 (garbled names).
 5. **Earlier demo runs** may have left three sample sources ("The Art of Memory",
    "Tides and the lunar cycle", "Consumer credit and interest rates") in an
    existing library; they are not removed automatically.
-6. **Slow engine start (~50 s).** The Core is packaged as a single file that
-   unpacks ~140 MB to a temporary folder on every launch. Packaging it as a
-   folder instead (PyInstaller "onedir") would remove that step and should bring
-   start-up down to a few seconds; it changes the build scripts, the installer
-   layout and the CI checks on all three systems, so it is left as a separate
-   piece of work.
+6. ~~**Slow engine start (~50 s).**~~ **Fixed** — moved to 9.5 ("Start-up delay
+   removed"): the Core is now packaged as a folder and answers in about one
+   second. Residual: the macOS and Linux desktop installers are not built by
+   CI or by the release workflow (only the frozen Core is), so the folder
+   layout inside a `.dmg` / `AppImage` has not been run.

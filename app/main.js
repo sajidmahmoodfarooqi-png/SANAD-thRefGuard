@@ -34,7 +34,8 @@ function loadOrCreateToken() {
   return t;
 }
 // dev layout: app/ sits next to sanad_core/ in the repo. Packaged layout: the
-// frozen Core binary is shipped in resources/core/ (see package.json build).
+// frozen Core folder (the program plus its _internal/ support files) is shipped
+// as resources/core/ (see package.json build and packaging/build_core.py).
 const DEV_ROOT = path.join(__dirname, "..");
 
 let coreProc = null;
@@ -74,7 +75,10 @@ ipcMain.handle("sanad:regenerate-token", () => {
 });
 
 function coreLaunch() {
-  // packaged: the frozen Core binary shipped in resources/core/. dev: system Python.
+  // packaged: the frozen Core shipped as the folder resources/core/ — the program
+  // sanad-core[.exe] with its support files in resources/core/_internal/, which
+  // it finds relative to itself (so it must stay inside that folder).
+  // dev: system Python.
   if (app.isPackaged) {
     const exe = process.platform === "win32" ? "sanad-core.exe" : "sanad-core";
     return { cmd: path.join(process.resourcesPath, "core", exe), args: [], cwd: process.resourcesPath };
@@ -167,11 +171,12 @@ app.whenReady().then(async () => {
   if (!isFirstInstance) return;
   TOKEN = loadOrCreateToken();     // stable token (needs userData, so set here)
   startCore();
-  // Open the window straight away instead of waiting for the Core. The installed
-  // Core is a one-file program that unpacks itself on every launch — measured at
-  // about 50 seconds on an ordinary laptop — and the old 25-second wait meant no
-  // window at all for 25 seconds, then one that said "Core not reachable". The
-  // window now says the engine is starting and connects by itself when it is up.
+  // Open the window straight away instead of waiting for the Core. The Core is
+  // now shipped as a folder and starts in a few seconds, but when it was a
+  // one-file program that unpacked itself on every launch it took about 50 — and
+  // waiting for it meant no window at all, then one that said "Core not
+  // reachable". So the window never waits: it says the engine is starting and
+  // connects by itself when it is up, however slow the machine.
   createWindow(false);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(coreProc !== null);
@@ -181,15 +186,18 @@ app.whenReady().then(async () => {
 
 function stopCore() {
   if (coreProc && !coreProc.killed) {
-    // On Windows the packaged Core is a one-file executable: a small launcher
-    // process that starts the real service as its CHILD. kill() ends only the
-    // launcher, which can leave the service itself running on the port after
-    // SANAD has closed — still holding the OLD token after "Regenerate token".
-    // taskkill /T ends the whole process tree. It must run BEFORE kill(): once
-    // the launcher is gone the tree can no longer be found through it.
+    // On Windows, end the Core's whole process TREE, not just the one process.
+    // When the Core was a one-file executable it was a small launcher that
+    // started the real service as its CHILD; kill() ended only the launcher and
+    // could leave the service running on the port after SANAD had closed —
+    // still holding the OLD token after "Regenerate token". In the folder
+    // layout the Core is a single process (checked on the packaged build), but
+    // the tree kill is kept so a Core that ever starts a helper process cannot
+    // outlive the app. taskkill /T must run BEFORE kill(): once the parent is
+    // gone the tree can no longer be found through it.
     if (process.platform === "win32" && coreProc.pid) {
       try { spawnSync("taskkill", ["/pid", String(coreProc.pid), "/T", "/F"], { windowsHide: true, timeout: 5000 }); }
-      catch (_) { /* best effort — kill() below still ends the launcher */ }
+      catch (_) { /* best effort — kill() below still ends the Core process itself */ }
     }
     coreProc.kill();
     coreProc = null;

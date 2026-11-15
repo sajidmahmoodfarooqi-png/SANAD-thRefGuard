@@ -48,18 +48,39 @@ jobs:
           pip install -r requirements.txt pyinstaller
       - name: Build standalone Core
         run: python packaging/build_core.py
-      - name: Smoke-test the frozen binary
+      - name: Smoke-test the frozen Core
         shell: bash
         run: |
-          BIN=packaging/dist/sanad-core
+          # The Core is a folder: the program plus its support files in _internal/.
+          DIR=packaging/dist/sanad-core
+          BIN="$DIR/sanad-core"
           [ -f "$BIN.exe" ] && BIN="$BIN.exe"
-          test -f "$BIN" || { echo "frozen binary missing"; exit 1; }
-          echo "built: $BIN ($(du -h "$BIN" | cut -f1))"
+          test -f "$BIN" || { echo "frozen Core program missing: $BIN"; exit 1; }
+          test -d "$DIR/_internal" || { echo "support folder missing: $DIR/_internal"; exit 1; }
+          echo "built: $DIR ($(du -sh "$DIR" | cut -f1))"
+          # Start it on a spare port with a throw-away library and wait for it to
+          # answer — a missing support file only shows up when it actually runs.
+          export SANAD_PORT=23897 SANAD_TOKEN=ci-smoke-test
+          export SANAD_DB="$RUNNER_TEMP/sanad-smoke.db"
+          "$BIN" > "$RUNNER_TEMP/sanad-core.log" 2>&1 &
+          PID=$!
+          OK=0
+          for i in $(seq 1 60); do
+            if curl -fsS "http://127.0.0.1:$SANAD_PORT/v1/health" 2>/dev/null | grep -q '"status" *: *"ok"'; then
+              OK=1; echo "Core answered /v1/health after about ${i}s"; break
+            fi
+            kill -0 "$PID" 2>/dev/null || { echo "Core exited before answering"; break; }
+            sleep 1
+          done
+          kill "$PID" 2>/dev/null || true
+          if [ "$OK" != 1 ]; then
+            echo "::error::frozen Core did not answer /v1/health"
+            cat "$RUNNER_TEMP/sanad-core.log"
+            exit 1
+          fi
       - name: Upload Core artifact
         uses: actions/upload-artifact@v7
         with:
           name: sanad-core-${{ matrix.os }}
-          path: |
-            packaging/dist/sanad-core
-            packaging/dist/sanad-core.exe
-          if-no-files-found: ignore
+          path: packaging/dist/sanad-core/
+          if-no-files-found: error
