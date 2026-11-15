@@ -18,7 +18,7 @@
     "productName": "SANAD",
     "files": ["main.js", "preload.js", "renderer/**/*"],
     "extraResources": [
-      { "from": "../packaging/dist", "to": "core" },
+      { "from": "../packaging/dist/sanad-core", "to": "core" },
       { "from": "../docs/SANAD-Guide.html", "to": "SANAD-Guide.html" }
     ],
     "win": { "icon": "../assets/branding/sanad-icon.ico", "target": ["nsis"] },
