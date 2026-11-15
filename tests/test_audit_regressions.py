@@ -495,6 +495,16 @@ def test_addin_does_not_wipe_a_list_when_the_library_does_not_match():
     assert "present.length" in TASKPANE.split("if (!entries.length)")[1].split("try {")[0]
 
 
+def test_addin_leaves_the_cursor_after_a_new_citation():
+    """Seen in real Word with real keystrokes: the cursor stayed in FRONT of a
+    new citation, so the next words landed before it, and End / right-arrow put
+    them inside the citation's control. After inserting, the add-in must move
+    the selection to just after the control."""
+    insert = TASKPANE.split("async function insertCitation")[1].split("async function insertBibliography")[0]
+    placed = insert.index("cc.insertText(res.rendered_text")
+    assert 'cc.getRange("After").select()' in insert[placed:]
+
+
 def test_addin_blanks_the_prompt_of_an_emptied_list():
     """An emptied control shows Word's grey "Click or tap here to enter text."
     where the reference list was (seen in real Word). The emptying branch must
