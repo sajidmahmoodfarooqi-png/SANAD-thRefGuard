@@ -50,6 +50,8 @@ _TYPE_ALIASES = {
 }
 
 _YEAR_RE = re.compile(r"\b(1[5-9]\d{2}|20\d{2})\b")
+# one "Surname, I. N." pair inside a reference-list-style author run
+_APA_PAIR = re.compile(r"([^\W\d_][^,;]*?),\s*((?:[^\W\d_]\.\s*-?\s*){1,5})(?=,|$)")
 _W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
 
@@ -65,16 +67,38 @@ def _split_authors(cell: str) -> list[dict]:
     separated by ';' (or 'and' / '&'); a lone 'Family, Given' is left as one
     author rather than being wrongly split on its comma."""
     cell = (cell or "").strip()
+    # a trailing "et al." is not a person (and must not end up inside a surname)
+    cell = re.sub(r"[,;]?\s*\bet\s+al\.?\s*$", "", cell, flags=re.IGNORECASE).strip()
     if not cell:
         return []
-    parts = None
-    for sep in (";", " and ", " & ", " and "):
-        if sep in cell:
-            parts = [p for p in (x.strip() for x in cell.split(sep)) if p]
-            break
-    if parts is None:
-        parts = [cell]
-    return [importer.parse_person_name(p) for p in parts]
+    # ';' is the unambiguous separator; otherwise split on the word "and" / "&"
+    if ";" in cell:
+        parts = cell.split(";")
+    else:
+        parts = re.split(r"\s+(?:and|&)\s+", cell, flags=re.IGNORECASE)
+    authors: list[dict] = []
+    for part in parts:
+        part = part.strip().strip(",").strip()
+        if not part or part.lower() in ("et al", "et al.", "others"):
+            continue
+        # An author cell typed the way a reference list prints it --
+        # "Smith, J., Jones, K., & Lee, M." -- holds several "Surname, Initials"
+        # pairs in one comma-separated run. Read as a single 'Family, Given' it
+        # became one author called Smith whose given name was "J., Jones, K.,".
+        pairs = _APA_PAIR.findall(part)
+        if len(pairs) >= 2:
+            authors.extend({"family": fam.strip(), "given": " ".join(ini.split())}
+                           for fam, ini in pairs)
+            continue
+        # "John Smith, Jane Doe, Ali Khan": three or more comma-separated full
+        # names (each of 2+ words). Two segments stay one author -- that shape is
+        # indistinguishable from a single "Family names, Given names".
+        segments = [seg.strip() for seg in part.split(",") if seg.strip()]
+        if len(segments) >= 3 and all(len(seg.split()) >= 2 for seg in segments):
+            authors.extend(importer.parse_person_name(seg) for seg in segments)
+            continue
+        authors.append(importer.parse_person_name(part))
+    return [a for a in authors if a]
 
 
 def _row_to_fields(row: dict) -> tuple[dict, list[dict]]:
@@ -85,7 +109,11 @@ def _row_to_fields(row: dict) -> tuple[dict, list[dict]]:
         canon = _COLUMN_ALIASES.get(header)
         if not canon or val in (None, ""):
             continue
+        if isinstance(val, float) and val.is_integer():
+            val = int(val)      # Excel hands whole numbers back as 12.0 -> "12", not "12.0"
         val = str(val).strip()
+        if not val:
+            continue
         if canon == "authors":
             authors_cell = val
         elif canon == "year":
@@ -108,8 +136,25 @@ def _row_to_fields(row: dict) -> tuple[dict, list[dict]]:
 # parsers
 # --------------------------------------------------------------------------- #
 
+def _csv_delimiter(header_line: str) -> str:
+    """The column separator this file actually uses. Excel writes ';' between
+    columns wherever ',' is the decimal mark (most of Europe), and a table
+    copied out of a spreadsheet is tab-separated; reading either as
+    comma-separated finds no "title" column and imports nothing. Whichever of
+    , ; tab splits the header row into the most columns wins (',' on a tie)."""
+    best, best_count = ",", header_line.count(",")
+    for cand in (";", "\t"):
+        if header_line.count(cand) > best_count:
+            best, best_count = cand, header_line.count(cand)
+    return best
+
+
 def parse_csv(text: str) -> list[tuple[dict, list[dict]]]:
-    reader = csv.DictReader(io.StringIO(text))
+    # Excel's "CSV UTF-8" starts with a byte-order mark, which would otherwise
+    # glue itself to the first header ("﻿title") so it is never recognised.
+    text = (text or "").lstrip("﻿")
+    header_line = next((ln for ln in text.splitlines() if ln.strip()), "")
+    reader = csv.DictReader(io.StringIO(text), delimiter=_csv_delimiter(header_line))
     out = []
     for raw in reader:
         row = {(k or "").strip().lower(): v for k, v in raw.items() if k}

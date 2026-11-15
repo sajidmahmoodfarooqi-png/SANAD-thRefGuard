@@ -65,7 +65,12 @@ async function core(path, opts) {
   if (t) headers["Authorization"] = "Bearer " + t;
   const r = await fetch(CORE + path, { headers, ...opts });
   if (r.status === 401) throw new Error("Not connected: paste your SANAD token in the add-in settings.");
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  if (!r.ok) {
+    // the Core explains most failures in plain words — show that, not "404 Not Found"
+    let detail = "";
+    try { const d = (await r.json()).detail; if (typeof d === "string") detail = d; } catch (_) { /* no JSON body */ }
+    throw new Error(detail || `${r.status} ${r.statusText}`);
+  }
   return r.status === 204 ? null : r.json();
 }
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -150,7 +155,7 @@ async function search() {
   }
   if (!results.length) { box.innerHTML = `<p class="muted">Nothing found for “${esc(q)}”.</p>`; return; }
   box.innerHTML = results.map((r) =>
-    `<div class="res" data-id="${esc(r.id)}"><div class="rt">${esc(r.title)}</div><div class="rm">${esc(r.authors || "")}${r.year ? " · " + r.year : ""}</div></div>`).join("");
+    `<div class="res" data-id="${esc(r.id)}"><div class="rt">${esc(r.title)}</div><div class="rm">${esc(r.authors || "")}${r.year ? " · " + esc(r.year) : ""}</div></div>`).join("");
   box.querySelectorAll(".res").forEach((el) => el.addEventListener("click", () => insertCitation(el.dataset.id)));
 }
 
@@ -164,14 +169,25 @@ async function insertCitation(refId) {
     try { res = await core("/v1/citations", { method: "POST", body: JSON.stringify({ document_id: docId(), reference_ids: [refId] }) }); }
     catch (e) { return notify("Couldn't create citation: " + e.message); }
   }
-  await Word.run(async (ctx) => {
-    const cc = ctx.document.getSelection().insertContentControl();
-    cc.tag = "sanad-cite";          // the ONLY place this add-in ever writes
-    cc.title = res.citation_id;     // stash the stable UUID for re-resolving / scanning
-    cc.appearance = "BoundingBox";
-    cc.insertText(res.rendered_text, Word.InsertLocation.replace);
-    await ctx.sync();
-  });
+  try {
+    await Word.run(async (ctx) => {
+      // The control is created at the END of the selection, on an empty
+      // (collapsed) range — never around the selection itself. Wrapping a
+      // selection and then filling the control would REPLACE whatever words the
+      // author had highlighted with the citation; this way highlighted prose is
+      // left exactly as it is and the citation lands just after it.
+      const cc = ctx.document.getSelection().getRange("End").insertContentControl();
+      cc.tag = "sanad-cite";          // the ONLY place this add-in ever writes
+      cc.title = res.citation_id;     // stash the stable UUID for re-resolving / scanning
+      cc.appearance = "BoundingBox";
+      cc.insertText(res.rendered_text, Word.InsertLocation.replace);
+      await ctx.sync();
+    });
+  } catch (e) {
+    // e.g. the cursor is in a protected region or inside another control. The
+    // record made for this citation is cleared the next time the list is built.
+    return notify("Couldn't place the citation here: " + e.message);
+  }
   notify("Inserted — build the list from the Bibliography tab");
 }
 
@@ -183,6 +199,7 @@ async function insertBibliography() {
   const msg = $("biblioMsg");
   msg.innerHTML = `<p class="muted">Building reference list…</p>`;
   let data;
+  let present = [], gathered = false;
   if (DEMO) {
     data = { entries: DEMO_REFS.filter((r) => demoCited.has(r.id)).map((r) => r.entry), paragraph_style: {} };
   } else {
@@ -190,7 +207,6 @@ async function insertBibliography() {
     // Core drops any citation the user deleted in Word before rebuilding the list.
     // IMPORTANT: only send the present-set if we actually read it — sending an
     // empty set on a failed read would tell the Core to prune every citation.
-    let present = [], gathered = false;
     try {
       await Word.run(async (ctx) => {
         const ccs = ctx.document.contentControls;
@@ -214,7 +230,34 @@ async function insertBibliography() {
   }
   const entries = data.entries || [];
   const ps = data.paragraph_style || {};
-  if (!entries.length) { return (msg.innerHTML = `<p class="muted">No SANAD citations in this document yet — insert some first.</p>`); }
+  if (!entries.length) {
+    if (!DEMO && gathered && present.length) {
+      // the document HAS citations but the engine returned nothing for them —
+      // the wrong library is open, or their sources were deleted. Leave any
+      // existing list alone rather than wiping it on a mismatch.
+      return (msg.innerHTML = `<p class="muted">This document has ${present.length} SANAD citation${present.length === 1 ? "" : "s"}, but none of their sources are in the library that is open. Your existing list was left as it is — run the Integrity check to see which are affected.</p>`);
+    }
+    if (!DEMO && gathered) {
+      // every citation has been removed from the document: a list left over
+      // from before would now show sources that are no longer cited — empty it
+      let emptied = false;
+      try {
+        await Word.run(async (ctx) => {
+          const existing = ctx.document.contentControls.getByTag("sanad-bibliography");
+          existing.load("items");
+          await ctx.sync();
+          if (existing.items.length) {
+            const cc = existing.items[0];
+            cc.clear();                     // safe: it is our tagged control
+            emptied = true;
+            await ctx.sync();
+          }
+        });
+      } catch (_) { /* nothing to empty, or the document is read-only */ }
+      if (emptied) return (msg.innerHTML = `<p class="muted">No SANAD citations are left in this document, so the reference list was emptied.</p>`);
+    }
+    return (msg.innerHTML = `<p class="muted">No SANAD citations in this document yet — insert some first.</p>`);
+  }
 
   try {
     await Word.run(async (ctx) => {
@@ -228,7 +271,9 @@ async function insertBibliography() {
         cc = existing.items[0];
         cc.clear();                       // safe: it is our tagged control
       } else {
-        cc = ctx.document.getSelection().insertContentControl();
+        // created on an empty range at the END of the selection, so the list
+        // can never replace text the author happens to have highlighted
+        cc = ctx.document.getSelection().getRange("End").insertContentControl();
         cc.tag = "sanad-bibliography";
         cc.title = "SANAD Reference List";
         cc.appearance = "BoundingBox";
@@ -247,6 +292,9 @@ async function insertBibliography() {
         if (ps.fontName) p.font.name = ps.fontName;
         if (ps.fontSizePt != null) p.font.size = ps.fontSizePt;
         if (ps.spaceAfterPt != null) p.spaceAfter = ps.spaceAfterPt;
+        // Word's API counts line spacing in points where 12 pt = one line, so a
+        // profile's "1.5 lines" is 18. (The profile's spacing used to be ignored.)
+        if (ps.lineSpacing != null && ps.lineSpacingRule === "multiple") p.lineSpacing = ps.lineSpacing * 12;
         if (ps.leftIndentPt != null) p.leftIndent = ps.leftIndentPt;          // hanging indent:
         if (ps.firstLineIndentPt != null) p.firstLineIndent = ps.firstLineIndentPt;  // negative first line
       });

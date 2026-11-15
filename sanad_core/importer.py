@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import re
 import sqlite3
+import unicodedata
 
 from . import csl_json, db
 
@@ -59,7 +60,10 @@ def parse_ris(text: str) -> list[dict]:
     records: list[dict] = []
     current: dict | None = None
     last_tag: str | None = None
-    for raw_line in text.splitlines():
+    # A UTF-8 byte-order mark (Windows editors and some EndNote exports write
+    # one) would otherwise hide the very first "TY  - " line and silently drop
+    # the first record of the file.
+    for raw_line in text.lstrip("﻿").splitlines():
         line = raw_line.rstrip("\r\n")
         if not line.strip():
             continue
@@ -87,8 +91,16 @@ def parse_ris(text: str) -> list[dict]:
 def ris_record_to_fields(rec: dict) -> tuple[dict, list[dict]]:
     ty = (rec.get("TY") or [""])[0]
     item_type = RIS_TYPE_MAP.get(ty.upper(), "article-journal")
+    # Exporters disagree on tags: the title may be TI or T1 (or BT for a whole
+    # book), and the journal may be T2, JO, JF, J2 or JA depending on the
+    # database it came from. Take the first one present rather than only TI/T2,
+    # so a perfectly good record doesn't arrive with no title or no journal.
     title = (rec.get("TI") or rec.get("T1") or [""])[0]
-    container = (rec.get("T2") or [None])[0]
+    book_title = (rec.get("BT") or [None])[0]
+    if not title and book_title:
+        title, book_title = book_title, None
+    container = (rec.get("T2") or rec.get("JO") or rec.get("JF") or rec.get("J2")
+                 or rec.get("JA") or [book_title])[0]
 
     year = None
     py = (rec.get("PY") or rec.get("Y1") or [None])[0]
@@ -99,9 +111,16 @@ def ris_record_to_fields(rec: dict) -> tuple[dict, list[dict]]:
 
     sp = (rec.get("SP") or [None])[0]
     ep = (rec.get("EP") or [None])[0]
-    pages = f"{sp}-{ep}" if sp and ep else sp
+    pages = f"{sp}-{ep}" if sp and ep and sp != ep else sp
 
     sn = rec.get("SN") or [None]
+    # the DOI normally sits in DO; some exporters only give it as a doi.org link
+    doi = (rec.get("DO") or [None])[0]
+    if not doi:
+        for link in (rec.get("UR") or []) + (rec.get("L3") or []):
+            if "doi.org/" in (link or "").lower():
+                doi = extract_doi(link)
+                break
 
     fields = {
         "item_type": item_type,
@@ -112,14 +131,16 @@ def ris_record_to_fields(rec: dict) -> tuple[dict, list[dict]]:
         "issue": (rec.get("IS") or [None])[0],
         "pages": pages,
         "publisher": (rec.get("PB") or [None])[0],
-        "doi": (rec.get("DO") or [None])[0],
+        "doi": doi,
         "isbn": sn[0],
         "url": (rec.get("UR") or [None])[0],
         "abstract": (rec.get("AB") or [None])[0],
         "language": (rec.get("LA") or [None])[0],
         "resolution_src": "import_ris",
     }
-    authors = [parse_person_name(a) for a in rec.get("AU") or []]
+    # AU is the usual author tag; A1 ("primary author") is what several
+    # databases and older EndNote/RefWorks exports use instead.
+    authors = [parse_person_name(a) for a in (rec.get("AU") or rec.get("A1") or [])]
     authors = [a for a in authors if a]
     return fields, authors
 
@@ -204,8 +225,8 @@ def parse_bibtex(text: str) -> list[dict]:
     entries = []
     for m in re.finditer(r"@(\w+)\s*\{", text):
         entry_type = m.group(1).lower()
-        if entry_type == "comment":
-            continue
+        if entry_type in ("comment", "string", "preamble"):
+            continue   # BibTeX housekeeping (abbreviations, LaTeX preamble) -- not references
         open_pos = m.end() - 1
         try:
             close_pos = _find_matching_brace(text, open_pos)
@@ -238,7 +259,9 @@ def bibtex_entry_to_fields(entry: dict) -> tuple[dict, list[dict]]:
         "year": year,
         "volume": f.get("volume"),
         "issue": f.get("number"),
-        "pages": f.get("pages"),
+        # BibTeX writes a page range with a LaTeX en-dash ("12--34"); store a plain
+        # hyphen so the rendered reference doesn't show a doubled dash
+        "pages": re.sub(r"\s*-{2,3}\s*", "-", f["pages"]) if f.get("pages") else None,
         "publisher": f.get("publisher"),
         "doi": f.get("doi"),
         "isbn": f.get("isbn"),
@@ -248,7 +271,9 @@ def bibtex_entry_to_fields(entry: dict) -> tuple[dict, list[dict]]:
     }
     authors = []
     if f.get("author"):
-        for seg in f["author"].split(" and "):
+        for seg in re.split(r"\s+and\s+", f["author"], flags=re.IGNORECASE):
+            if seg.strip().lower() in ("others", "et al", "et al."):
+                continue   # BibTeX's "and others" means "et al." -- not a person
             a = parse_person_name(seg)
             if a:
                 authors.append(a)
@@ -262,7 +287,9 @@ def bibtex_entry_to_fields(entry: dict) -> tuple[dict, list[dict]]:
 
 _APA_AUTHOR_RE = re.compile(r"([A-ZÀ-Ý][^,()]*?),\s*((?:[A-Z]\.\s*){1,5})")
 _YEAR_RE = re.compile(r"\b((?:19|20)\d{2})([a-z])?\b")
-_LEADNUM = re.compile(r"^\s*\d+\.\s*")
+# list numbering as people actually type it: "1. ", "1) ", "[1] ", "(1) "
+_LEADNUM = re.compile(r"^\s*(?:\d+[.)]|\[\d+\]|\(\d+\))\s*")
+_LIST_HEADING = re.compile(r"(references|bibliography|works cited)\.?", re.I)
 
 
 def parse_typed_reference(raw: str) -> tuple[dict, list[dict]]:
@@ -304,19 +331,42 @@ def parse_typed_reference(raw: str) -> tuple[dict, list[dict]]:
 
 def split_typed_list(text: str) -> list[str]:
     """A Markdown/plain numbered list ('1. Ref text...') -> raw reference
-    strings, one per line."""
-    out = []
-    for line in text.splitlines():
-        if _LEADNUM.match(line):
-            out.append(_LEADNUM.sub("", line).strip())
-    return out
+    strings, one per line. Lines that carry no number are skipped (headings,
+    stray notes) -- unless NOTHING in the text is numbered, in which case it is
+    a plain one-reference-per-line list and every non-empty line is taken, so a
+    list pasted without numbers doesn't silently import as "0 references"."""
+    lines = [ln for ln in text.lstrip("﻿").splitlines() if ln.strip()]
+    numbered = [_LEADNUM.sub("", ln).strip() for ln in lines if _LEADNUM.match(ln)]
+    if numbered:
+        return [r for r in numbered if r]
+    return [ln.strip() for ln in lines if not _LIST_HEADING.fullmatch(ln.strip())]
 
 
 # --------------------------------------------------------------------------- #
 # Insertion (shared by every import path)
 # --------------------------------------------------------------------------- #
 
+def _clean_author(author: object) -> dict:
+    """One author dict reduced to non-empty, stripped name parts. Anything that
+    isn't a usable name (not a dict, or every part blank/None) comes back empty,
+    so it is skipped rather than stored as a nameless author row."""
+    if not isinstance(author, dict):
+        return {}
+    out = {}
+    for key in ("literal", "family", "given"):
+        val = author.get(key)
+        if val is not None and str(val).strip():
+            out[key] = str(val).strip()
+    return out
+
+
+def clean_authors(authors: object) -> list[dict]:
+    """An author list with every unusable entry dropped (see _clean_author)."""
+    return [a for a in (_clean_author(x) for x in (authors or [])) if a]
+
+
 def find_or_create_author(conn: sqlite3.Connection, author: dict) -> str | None:
+    author = _clean_author(author)
     if not author:
         return None
     if author.get("literal"):
@@ -330,7 +380,8 @@ def find_or_create_author(conn: sqlite3.Connection, author: dict) -> str | None:
         return aid
     family, given = author.get("family"), author.get("given")
     row = conn.execute(
-        "SELECT id FROM author WHERE family = ? AND IFNULL(given,'') = IFNULL(?, '')",
+        "SELECT id FROM author WHERE IFNULL(family,'') = IFNULL(?, '') "
+        "AND IFNULL(given,'') = IFNULL(?, '') AND literal IS NULL",
         (family, given),
     ).fetchone()
     if row:
@@ -378,8 +429,13 @@ def normalize_title(title: object) -> str:
     stray commas, or publisher markup normalise to the same string, which lets
     the duplicate detector pair a full record (with a DOI + authors) against a
     bare re-entry of the same work (title + year only)."""
-    t = re.sub(r"<[^>]+>", " ", str(title or "").lower())
-    t = re.sub(r"[^a-z0-9]+", " ", t)
+    t = unicodedata.normalize("NFKC", str(title or "")).casefold()
+    t = re.sub(r"<[^>]+>", " ", t)
+    # Keep the letters and digits of EVERY script. An ASCII-only filter reduced
+    # an Urdu/Arabic title to nothing but its digits, so two different Urdu
+    # works that both mention "2020" normalised to the same string and were
+    # treated as duplicates of each other.
+    t = re.sub(r"[^\w]+|_", " ", t)
     return re.sub(r"\s+", " ", t).strip()
 
 
@@ -477,6 +533,61 @@ def title_is_bare_locator(title: object, authors: list[dict]) -> bool:
     return bool(_DOI_ANYWHERE.fullmatch(t))   # the whole title is a bare DOI
 
 
+_TEXT_FIELDS = ("container_title", "year_suffix", "volume", "issue", "pages", "publisher",
+                "doi", "isbn", "url", "abstract", "language", "raw_source_text",
+                "resolution_src")
+# on an in-place update, a blank incoming value keeps the stored one (see insert_reference)
+_MERGE_KEEP_IF_BLANK = ("title", "year", "confidence", *_TEXT_FIELDS)
+
+
+def coerce_year(value: object) -> int | None:
+    """A publication year as an integer, or None. Years reach the importer as
+    ints, as strings ("2020", "2020/05/01"), as spreadsheet floats (2020.0) and
+    occasionally as free text ("n.d.", "in press"). The column is INTEGER and
+    everything downstream (sorting, the year-mismatch rule, CSL date-parts)
+    assumes a number, so anything that isn't a recognisable year becomes None
+    rather than being stored as text and breaking those later."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    m = re.search(r"(?<!\d)\d{4}(?!\d)", str(value))
+    return int(m.group(0)) if m else None
+
+
+def clean_fields(fields: object) -> dict:
+    """Reference fields made safe to store, whatever the source sent: a title
+    and item type that are always text (never None -- both columns are NOT
+    NULL), a year that is a real integer or None, text fields as stripped
+    strings with blanks turned to None, and a numeric confidence. Every import
+    path funnels through here, so one malformed row (a missing title, a year of
+    "n.d.") can no longer fail a whole import with a database error."""
+    out = dict(fields) if isinstance(fields, dict) else {}
+    out["title"] = str(out.get("title") or "").strip()
+    out["item_type"] = str(out.get("item_type") or "").strip() or "article-journal"
+    out["year"] = coerce_year(out.get("year"))
+    for key in _TEXT_FIELDS:
+        val = out.get(key)
+        if val is not None:
+            out[key] = str(val).strip() or None
+    try:
+        out["confidence"] = float(out["confidence"]) if out.get("confidence") is not None else None
+    except (TypeError, ValueError):
+        out["confidence"] = None
+    return out
+
+
+def _stored_record(conn: sqlite3.Connection, ref_id: str) -> tuple[dict, list[dict]]:
+    """The reference currently on file (fields + ordered authors), for merging."""
+    row = conn.execute("SELECT * FROM reference WHERE id = ?", (ref_id,)).fetchone()
+    authors = conn.execute(
+        "SELECT a.family, a.given, a.literal FROM reference_author ra "
+        "JOIN author a ON a.id = ra.author_id "
+        "WHERE ra.reference_id = ? ORDER BY ra.position", (ref_id,),
+    ).fetchall()
+    return (dict(row) if row else {}), clean_authors([dict(a) for a in authors])
+
+
 def insert_reference(conn: sqlite3.Connection, fields: dict, authors: list[dict]) -> str | None:
     """Insert one reference + its authors. Dedupes on DOI first, then on an
     exact full-content signature for references with no DOI at all -- so
@@ -487,6 +598,8 @@ def insert_reference(conn: sqlite3.Connection, fields: dict, authors: list[dict]
     with no author -- see looks_like_malformed_bare_reference. Callers that
     loop over many records should skip a None rather than fail the whole
     import over one bad row."""
+    fields = clean_fields(fields)
+    authors = clean_authors(authors)
     if looks_like_malformed_bare_reference(fields.get("title"), authors):
         return None
     # canonicalise the DOI once, up front, so it is stored, matched, and written
@@ -497,6 +610,22 @@ def insert_reference(conn: sqlite3.Connection, fields: dict, authors: list[dict]
         find_by_content_signature(conn, sig)
     ref_id = existing_id or db.new_id()
     now = db.now_iso()
+
+    keep_existing_authors = False
+    if existing_id:
+        # Updating in place must never LOSE information. A re-import is often
+        # sparser than what is already on file (a spreadsheet row carrying only
+        # title + DOI, matched to a record previously completed from Crossref):
+        # a value the new row leaves blank keeps what the library already has,
+        # and an author-less row keeps the existing authors. Anything the new
+        # row does supply still wins, exactly as before.
+        old_fields, old_authors = _stored_record(conn, existing_id)
+        for key in _MERGE_KEEP_IF_BLANK:
+            if fields.get(key) in (None, ""):
+                fields[key] = old_fields.get(key)
+        if not authors and old_authors:
+            authors, keep_existing_authors = old_authors, True
+        sig = content_signature(fields, authors)
 
     csl = csl_json.build_csl_json({**fields, "id": ref_id}, authors)
 
@@ -516,6 +645,8 @@ def insert_reference(conn: sqlite3.Connection, fields: dict, authors: list[dict]
                 fields.get("confidence"), csl_json.dumps(csl), sig, now, ref_id,
             ),
         )
+        if keep_existing_authors:
+            return ref_id          # author links untouched -- nothing more to write
         conn.execute("DELETE FROM reference_author WHERE reference_id = ?", (ref_id,))
     else:
         conn.execute(
@@ -552,6 +683,8 @@ def update_reference(conn: sqlite3.Connection, ref_id: str, fields: dict,
     rebuild its CSL JSON and content signature. Used to repair a malformed entry
     with freshly-resolved metadata — the row keeps its id (so citations pointing
     at it stay valid) but becomes a real, complete reference."""
+    fields = clean_fields(fields)
+    authors = clean_authors(authors)
     fields = {**fields, "doi": normalize_doi(fields.get("doi"))}
     sig = content_signature(fields, authors)
     csl = csl_json.build_csl_json({**fields, "id": ref_id}, authors)

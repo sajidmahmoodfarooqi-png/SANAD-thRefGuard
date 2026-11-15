@@ -15,10 +15,14 @@ const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/cs
 (async () => {
   const opts = await devCerts.getHttpsServerOptions(); // installs/returns {cert,key,ca}
   https.createServer(opts, (req, res) => {
-    let p = decodeURIComponent((req.url || "/").split("?")[0]);
+    let p;
+    try { p = decodeURIComponent((req.url || "/").split("?")[0]); }
+    catch (_) { res.writeHead(400); return res.end("bad request"); }   // malformed %-escape must not crash the server
     if (p === "/") p = "/taskpane.html";
     const file = path.join(ROOT, p);
-    if (!file.startsWith(ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+    // ROOT + separator: a bare prefix test would also accept a sibling folder
+    // whose name merely starts with this one (…/word-backup/secret)
+    if (!file.startsWith(ROOT + path.sep) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
       res.writeHead(404); return res.end("not found");
     }
     res.setHeader("Content-Type", TYPES[path.extname(file)] || "application/octet-stream");

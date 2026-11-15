@@ -262,3 +262,90 @@ Tracking the audit's findings as they are closed.
   rather than re-embedding the whole library pool every time (the dominant cost
   under the real semantic model). Bounded + FIFO-evicted; returns byte-identical
   vectors so determinism is preserved.
+
+---
+
+## 9. Diagnostic audit — November 2026 (v0.2.12 code)
+
+A line-by-line pass over the Core (`sanad_core/`), the desktop shell (`app/`) and
+the Word add-in (`connectors/word/`). Every item below was **reproduced against
+the code before it was changed** and is pinned by a test in
+`tests/test_audit_regressions.py` (43 tests; suite 218 → 261, all passing).
+
+### 9.1 Actions that failed outright
+| # | What the user saw | Cause | Fix |
+|---|---|---|---|
+| 1 | **Integrity check failed** whenever the document held a citation control SANAD had no record of — the exact case rule R3 exists to report. | The finding was saved with a link to a citation row that, by definition, does not exist; the database refused it. | Orphan-control findings are stored without the link; the control id travels in the suggestion and is returned as `citation_id` as before. |
+| 2 | **"Update reference list" failed** after deleting, in Word, a citation that had an integrity finding. | The stale citation row could not be deleted while findings pointed at it. | Its findings are removed with it. |
+| 3 | **Deleting a style profile failed** if any document used it. | Same class of link. | Documents using it fall back to the default style. |
+| 4 | Integrity check failed on a document with no citations yet (e.g. a legacy list check). | No document row to attach findings to. | The row is created on first scan. |
+| 5 | Import failed on one odd row — a year of "n.d.", a missing title/type, a nameless author. | Values were written to the database unchecked. | One cleaning step for every import path (`importer.clean_fields` / `clean_authors`); a title-less reference is refused with a clear message. |
+| 6 | An old `.xls` / renamed / damaged file gave "500 Internal Server Error". | Parser exception not handled. | Clear 400: "save it again as .xlsx". |
+| 7 | A junk style-profile value was accepted, then broke every citation in any document it was applied to. | Only one field was validated. | Profile values are validated when saved. |
+| 8 | Semantic check could fail once its cache filled. | Cache evicted entries the same call still needed. | Each call is answered from its own results. |
+| 9 | A junk `Authorization` header produced a server error instead of "unauthorized". | Text comparison rejects non-ASCII. | Compared as bytes. |
+
+### 9.2 References lost or wrongly merged (the costliest class)
+| # | Defect | Fix |
+|---|---|---|
+| 10 | **Two different Urdu works were treated as duplicates.** Title normalisation kept only a–z/0–9, so an Urdu title collapsed to its digits ("2020") and "Remove duplicates" would delete one of them. | Normalisation keeps letters and digits of every script. |
+| 11 | **Different works sharing a generic title were auto-removed.** "Introduction", "Editorial", "Book review" in the same year were merged on title + year alone. | A group with different lead authors, volumes or first pages is no longer auto-merged; it is listed under Library health → Possible duplicates for a human decision. |
+| 12 | **Re-importing a sparse row wiped a complete record.** A spreadsheet row with only title + DOI overwrote the stored authors, abstract, journal and year with blanks. | Blank incoming values keep what is on file; supplied values still win. |
+| 13 | **An unresolvable DOI could never be cleaned up.** Crossref's "no such DOI" (404) was read as "no connection", so the entry was skipped forever. | 404 → removed (as documented); any other error → left alone. |
+| 14 | **The demo check added three made-up sources to the user's real library**, and could cite the user's own references. | The sample run now removes exactly what it added and its sample document; the user's own copies are never touched. New `DELETE /v1/documents/{id}`; import returns the `ids` it created. |
+| 15 | A citation to sources not in the library was created with empty text (an invisible citation in the document). | Refused with a clear message. |
+| 16 | The integrity check reported problems "in" citations already deleted from the document. | Only citations actually present are checked. |
+
+### 9.3 Imports that silently dropped or mangled rows
+RIS: a byte-order mark hid the first record; `A1` authors and `JO`/`JF`/`J2`/`JA`/`BT`
+titles were ignored; a DOI given only as a doi.org link was missed. BibTeX:
+`@string`/`@preamble` were imported as references; "and others" became an author
+called "others"; `12--34` pages kept the double dash. Typed lists: only `1.`
+numbering was recognised (`1)`, `[1]`, `(1)` and un-numbered lists imported
+nothing). CSV: Excel's "CSV UTF-8" (byte-order mark) and `;`- or tab-separated
+files imported nothing; an author cell typed `Smith, J., Jones, K., & Lee, M.`
+became one author; Excel whole numbers arrived as `12.0`. Handbook reader:
+`25 mm` was read as `5 mm`. Crossref: organisation authors were dropped. Text
+files saved as Windows-1252 or UTF-16 were read as UTF-8 (garbled names).
+
+### 9.4 Style and bilingual handling
+- **The builder's "use 'and' instead of '&' in text" checkbox did nothing** (it
+  always arrived with "&" kept for the list, and a disagreement changed nothing).
+  Each setting now applies to the names its own layout prints.
+- **Every citation in Urdu text was flagged as off-topic** by the default
+  (word-overlap) semantic check: it saw no words in non-Latin text. It now reads
+  words of every script, and gives **no opinion** where it cannot judge (an Urdu
+  sentence citing an English source) instead of a false alarm.
+- R6 duplicate-title detection now works for non-Latin titles.
+
+### 9.5 Desktop app and Word add-in
+- **Text-integrity gap in the add-in:** inserting a citation or the list while
+  text was highlighted wrapped *that text* in the control and replaced it. The
+  control is now always created on an empty range at the end of the selection.
+  Guarded by a static test. *(Not yet exercised in live Word — see 9.6.)*
+- Add-in: a failed insert is reported instead of failing silently; the profile's
+  line spacing is applied to the list; a list left over after every citation is
+  removed is emptied — but never when the document still has citations the open
+  library does not know (wrong library); that case is explained instead.
+- App: errors show the Core's explanation, not "400 Bad Request"; deleting the
+  last row of the last page no longer shows an empty table; a second launch
+  focuses the existing window instead of riding on the first one's Core; on
+  Windows the Core's whole process tree is stopped on exit and before
+  "Regenerate token" restarts (a surviving Core kept the old token).
+
+### 9.6 Not changed — owner decisions and residual risk
+1. **Undo after a list rebuild.** If a citation is deleted in Word, the list is
+   rebuilt, and the deletion is then undone, the restored control has no record
+   and is reported by R3. This is the documented v0.2.12 behaviour (stale rows are
+   pruned); making it non-destructive is a design choice, not a bug fix.
+2. **"et al." threshold** is applied to both the in-text and reference-list
+   layouts (documented scope). With APA it has no visible effect on the list.
+3. **A "Save As" copy of a document** shares the original's document id, so the
+   two files share citation records.
+4. **Not verified here:** the Electron window and live Word were not opened in
+   this pass. The JavaScript is syntax-checked and the app's sample-check flow was
+   replayed against the Core end to end, but the add-in changes (selection
+   handling, line spacing) need one manual pass in Word before release.
+5. **Earlier demo runs** may have left three sample sources ("The Art of Memory",
+   "Tides and the lunar cycle", "Consumer credit and interest rates") in an
+   existing library; they are not removed automatically.

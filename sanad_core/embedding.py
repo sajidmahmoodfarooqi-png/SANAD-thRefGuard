@@ -35,7 +35,10 @@ def semantic_available() -> bool:
     model. Lets the UI and API state honestly which mode is in effect."""
     return importlib.util.find_spec("sentence_transformers") is not None
 
-_TOKEN_RE = re.compile(r"[a-z0-9]+")
+# words of ANY script, not just a-z: an ASCII-only pattern found no words at all
+# in an Urdu/Arabic sentence, so its vector was all zeros and every citation in
+# Urdu text scored 0 similarity -- i.e. was flagged as off-topic.
+_TOKEN_RE = re.compile(r"[^\W_]+")
 # function words carry no topic; dropping them keeps the lexical proxy focused on
 # content words so unrelated sentences don't look similar just for sharing "the".
 _STOPWORDS = frozenset(
@@ -120,18 +123,23 @@ class CachingEmbedding:
         self._max = max_entries
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        missing = [t for t in dict.fromkeys(texts) if t not in self._cache]
+        wanted = list(dict.fromkeys(texts))
+        # Answer THIS call from a local map, never by reading the shared cache
+        # back afterwards: once the cache is full, storing this call's new
+        # vectors evicts the oldest entries -- which can be texts this very call
+        # also needs (or, for a batch larger than the cache, its own earlier
+        # items). Reading them back then raised KeyError and failed the scan.
+        found = {t: self._cache[t] for t in wanted if t in self._cache}
+        missing = [t for t in wanted if t not in found]
         if missing:
-            for t, v in zip(missing, self._inner.embed(missing)):
-                self._cache[t] = v
-                if len(self._cache) > self._max:
-                    self._cache.popitem(last=False)  # evict oldest
-        else:
-            # keep hot entries fresh-ish for eviction ordering only when we didn't
-            # just insert; cheap and keeps re-scanned refs from aging out first.
-            for t in dict.fromkeys(texts):
-                self._cache.move_to_end(t)
-        return [self._cache[t] for t in texts]
+            found.update(zip(missing, self._inner.embed(missing)))
+        for t in wanted:
+            # (re)insert at the fresh end, so texts in current use age out last
+            self._cache[t] = found[t]
+            self._cache.move_to_end(t)
+        while len(self._cache) > self._max:
+            self._cache.popitem(last=False)  # evict oldest
+        return [found[t] for t in texts]
 
 
 def get_embedding_provider(prefer_semantic: bool = True, cache: bool = True):

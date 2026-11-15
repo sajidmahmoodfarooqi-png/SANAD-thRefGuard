@@ -9,8 +9,32 @@ async function api(path, opts) {
   const headers = { "Content-Type": "application/json" };
   if (TOKEN) headers["Authorization"] = "Bearer " + TOKEN;
   const r = await fetch(CORE + path, { headers, ...opts });
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  if (!r.ok) throw new Error(await errorText(r));
   return r.status === 204 ? null : r.json();
+}
+
+// The Core explains most failures in plain words (a JSON "detail"). Show that to
+// the user rather than a bare status line like "400 Bad Request".
+async function errorText(r) {
+  try {
+    const d = (await r.json()).detail;
+    if (typeof d === "string" && d) return d;
+    if (d && Array.isArray(d.errors) && d.errors.length) return d.errors.join("; ");
+    if (Array.isArray(d) && d.length && d[0] && d[0].msg) return d.map((x) => x.msg).join("; ");
+  } catch (_) { /* no JSON body */ }
+  return `${r.status} ${r.statusText}`.trim();
+}
+
+// Decode a text file the way it was actually saved. Reference exports on Windows
+// are not always UTF-8: EndNote and older tools write Windows-1252 or UTF-16, and
+// reading those as UTF-8 turns every accented name into "�". Strict UTF-8 first,
+// then UTF-16 by its byte-order mark, then Windows-1252 as the fallback.
+function decodeText(ab) {
+  const bytes = new Uint8Array(ab);
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder("utf-16le").decode(bytes);
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder("utf-16be").decode(bytes);
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
+  catch (_) { return new TextDecoder("windows-1252").decode(bytes); }
 }
 
 const $ = (id) => document.getElementById(id);
@@ -104,6 +128,12 @@ async function loadLibrary() {
     wrap.innerHTML = `<div class="empty"><h3>Core not reachable</h3><p>The SANAD Core service isn't responding. It should start automatically with the app.</p></div>`;
     return;
   }
+  // deleting the last row(s) of the last page leaves the offset past the end —
+  // step back to the new last page instead of showing an empty table
+  if (!results.length && total > 0 && libOffset > 0) {
+    libOffset = Math.floor((total - 1) / LIB_PAGE) * LIB_PAGE;
+    return loadLibrary();
+  }
 
   // header counts always reflect the TRUE total, not just the current page
   const label = q ? `${total.toLocaleString()} match${total === 1 ? "" : "es"}` : `${total.toLocaleString()} source${total === 1 ? "" : "s"}`;
@@ -123,7 +153,7 @@ async function loadLibrary() {
   const rows = results.map((r, i) => `
     <tr data-i="${i}"><td class="ti">${esc(r.title)}</td>
     <td class="au">${esc(r.authors || "")}</td>
-    <td class="yr">${r.year ?? ""}</td>
+    <td class="yr">${esc(r.year ?? "")}</td>
     <td><span class="tag">${esc(itemLabel(r.item_type))}</span></td></tr>`).join("");
 
   const from = total ? libOffset + 1 : 0, to = Math.min(libOffset + LIB_PAGE, total);
@@ -202,7 +232,7 @@ function showDetail(r) {
   d.innerHTML = `
     <div class="k" style="margin-top:0">Title</div><div class="dt">${esc(r.title)}</div>
     <div class="dau">${esc(r.authors || "—")}</div>
-    <div class="k">Year</div><div class="val">${r.year ?? "—"}</div>
+    <div class="k">Year</div><div class="val">${esc(r.year ?? "—")}</div>
     <div class="k">Type</div><div class="val">${esc(itemLabel(r.item_type))}</div>
     ${r.doi ? `<div class="k">DOI</div><div class="doi">${esc(r.doi)}</div>` : ""}
     <div class="k">Reference id</div><div class="val" style="font-family:var(--mono);font-size:11px;color:var(--faint)">${esc(r.id)}</div>
@@ -519,8 +549,8 @@ function importFile(file) {
     reader.onload = () => doImport({ format, resolve, data_b64: abToB64(reader.result) });
     reader.readAsArrayBuffer(file);
   } else {
-    reader.onload = () => doImport({ format, resolve, text: reader.result });
-    reader.readAsText(file);
+    reader.onload = () => doImport({ format, resolve, text: decodeText(reader.result) });
+    reader.readAsArrayBuffer(file);
   }
 }
 
@@ -810,7 +840,7 @@ function fromManual() {
         openStyleBuilder(pf);
       } catch (e) { toast("Couldn't read the manual: " + e.message); }
     };
-    if (fmt === "txt") { reader.onload = () => done({ format: "txt", text: reader.result }); reader.readAsText(file); }
+    if (fmt === "txt") { reader.onload = () => done({ format: "txt", text: decodeText(reader.result) }); reader.readAsArrayBuffer(file); }
     else { reader.onload = () => done({ format: fmt, data_b64: abToB64(reader.result) }); reader.readAsArrayBuffer(file); }
   });
   input.click();
@@ -890,22 +920,45 @@ AB  - Central bank interest rate decisions affect inflation and lending in the c
 PY  - 2018
 ER  -
 `;
+const DEMO_TITLES = ["The Art of Memory", "Tides and the lunar cycle", "Consumer credit and interest rates"];
 async function runDemoScan() {
   const body = $("intgBody");
   body.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:8px">Building a sample document and checking it…</div>`;
+  // The demo runs against the real engine, so it needs three sample sources and
+  // a sample document for a moment — but a researcher's library must never be
+  // left holding made-up references they could later cite by accident. So:
+  // note which of the sample titles are ALREADY in the library (the user's own
+  // copies are never touched), and afterwards remove exactly what this run added.
+  const doc = "demo-" + Date.now();
+  let added = [];
   try {
-    await api("/v1/library/import", { method: "POST", body: JSON.stringify({ format: "ris", text: DEMO_RIS }) });
-    const rid = async (q) => (await api(`/v1/library/search?q=${encodeURIComponent(q)}`)).results[0].id;
-    const fisher = await rid("Art of Memory"), frost = await rid("Consumer credit");
-    const doc = "demo-" + Date.now();
+    const mine = new Set();
+    for (const title of DEMO_TITLES) {
+      const d = await api(`/v1/library?q=${encodeURIComponent(title)}&limit=200`);
+      d.results.forEach((r) => mine.add(r.id));
+    }
+    const imp = await api("/v1/library/import", { method: "POST", body: JSON.stringify({ format: "ris", text: DEMO_RIS }) });
+    if (!imp.ids || imp.ids.length < 3) throw new Error("the sample sources could not be loaded");
+    added = imp.ids.filter((id) => !mine.has(id));
+    const [fisher, , frost] = imp.ids;   // same order as DEMO_RIS
     await api("/v1/citations", { method: "POST", body: JSON.stringify({ document_id: doc, reference_ids: [fisher], raw_original_text: "(Fisher, 1998)" }) });
     const c2 = (await api("/v1/citations", { method: "POST", body: JSON.stringify({ document_id: doc, reference_ids: [frost], raw_original_text: "(Frost, 2018)" }) })).citation_id;
     const scan = await api(`/v1/documents/${doc}/scan`, { method: "POST", body: JSON.stringify({
       contexts: { [c2]: "The rise and fall of coastal water levels follows the moon's gravitational pull across the month." } }) });
-    renderFlags(scan);
+    renderFlags(scan, true);
   } catch (e) { body.innerHTML = `<div class="empty"><h3>Demo couldn't run</h3><p>${esc(e.message)}</p></div>`; }
+  finally {
+    try { await api(`/v1/documents/${encodeURIComponent(doc)}`, { method: "DELETE" }); } catch { /* best effort */ }
+    for (const id of added) {
+      try { await api(`/v1/library/${encodeURIComponent(id)}`, { method: "DELETE" }); } catch { /* best effort */ }
+    }
+    refreshHomeStats();
+  }
 }
-function renderFlags(scan) {
+// `sample` = the built-in demo: its findings were computed for real but belong to
+// a throw-away document that has already been cleared, so its buttons only act on
+// screen and it does not count towards the user's own open-findings badge.
+function renderFlags(scan, sample) {
   const flags = scan.flags || [], tb = scan.tier_b || {};
   const map = (s) => (s === "error" ? "error" : s === "warning" ? "warn" : "info");
   const count = (s) => flags.filter((f) => f.severity === s).length;
@@ -916,13 +969,15 @@ function renderFlags(scan) {
     return `<div class="flag ${s}"><div class="top"><span class="bdg ${s}">${esc(f.severity)}</span><span class="rl">${esc(f.rule_id)}</span></div><p class="msg">${esc(f.message)}</p>${alt}<div class="acts2"><button class="btn small primary" data-flag="${esc(f.id)}" data-st="confirmed">Confirm fix</button><button class="btn small" data-flag="${esc(f.id)}" data-st="dismissed">Dismiss</button></div></div>`;
   }).join("");
   const summary = `<div class="sumrow"><span class="sev"><span class="c" style="background:var(--sev-error)"></span> ${count("error")} error</span><span class="sev"><span class="c" style="background:var(--sev-warn)"></span> ${count("warning")} to check</span><span class="sev"><span class="c" style="background:var(--sev-info)"></span> ${count("info")} suggestion</span><span style="margin-left:auto;font-size:12px;color:var(--muted)">Semantic check: ${tb.ran ? "on · " + esc(tb.backend) : "off"}</span></div>`;
-  $("intgBody").innerHTML = summary + (cards || `<div class="empty"><h3>All clear</h3><p>No issues found.</p></div>`);
+  const sampleNote = sample ? `<p style="font-size:12.5px;color:var(--muted);margin:0 0 12px">This was a sample document with sample sources. Nothing from it was kept — your library is exactly as it was.</p>` : "";
+  $("intgBody").innerHTML = summary + sampleNote + (cards || `<div class="empty"><h3>All clear</h3><p>No issues found.</p></div>`);
   $("intgBody").querySelectorAll("[data-flag]").forEach((b) => b.addEventListener("click", async () => {
     try {
-      await api(`/v1/flags/${b.dataset.flag}`, { method: "PUT", body: JSON.stringify({ status: b.dataset.st }) });
+      if (!sample) await api(`/v1/flags/${b.dataset.flag}`, { method: "PUT", body: JSON.stringify({ status: b.dataset.st }) });
       toast(b.dataset.st === "dismissed" ? "Dismissed" : "Confirmed"); b.closest(".flag").style.opacity = 0.45;
     } catch (e) { toast(e.message); }
   }));
+  if (sample) return;
   const open = flags.filter((f) => f.status === "open").length;
   const badge = $("navFlagBadge"); badge.textContent = open; badge.classList.toggle("show", open > 0);
   $("mFlags").textContent = open;

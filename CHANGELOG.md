@@ -6,6 +6,23 @@ Notable changes per release. Full user-facing notes are in
 This project uses semantic-ish `vMAJOR.MINOR.PATCH` tags; each tag builds and publishes a Windows
 installer via CI.
 
+## [Unreleased] — diagnostic audit: crash, data-loss and import fixes
+Full findings: [docs/AUDIT.md §9](docs/AUDIT.md). 43 new regression tests (suite 218 → 261).
+- **Fixed failures:** the integrity check on a document with an unrecorded citation control;
+  "Update reference list" after deleting a flagged citation in Word; deleting a style profile a
+  document uses; imports stopped by one odd row (year "n.d.", missing title); unreadable `.xls` files.
+- **No more lost references:** different Urdu titles, and different works sharing a generic title
+  ("Introduction", "Editorial"), are no longer auto-merged as duplicates; re-importing a sparse row no
+  longer blanks a complete record; the demo check leaves nothing behind in the library.
+- **Imports read more:** RIS with a byte-order mark and `A1`/`JO`/`JF` tags; BibTeX `@string`,
+  "and others", `--` page ranges; `1)` / `[1]` / un-numbered typed lists; Excel-saved and
+  `;`-separated CSV; reference-list-style author cells; Windows-1252 / UTF-16 text files.
+- **Style & Urdu:** the "use 'and' instead of '&'" option now works; the context check reads Urdu
+  text instead of flagging every Urdu citation, and stays silent where it cannot judge.
+- **Word add-in:** inserting a citation can no longer replace highlighted text; the profile's line
+  spacing is applied to the reference list.
+- **API:** `DELETE /v1/documents/{id}`; `POST /v1/library/import` also returns the `ids` it created.
+
 ## [0.2.10] — the seal is the icon now, and you can see it
 - The ornate SANAD seal (set into a solid gold-rimmed medallion so it stays visible on any
   background and at small sizes) is now the Desktop/Taskbar icon and the in-app identity.
