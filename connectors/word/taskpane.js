@@ -249,6 +249,9 @@ async function insertBibliography() {
           if (existing.items.length) {
             const cc = existing.items[0];
             cc.clear();                     // safe: it is our tagged control
+            // an empty control would show Word's grey "Click or tap here to enter
+            // text." where the list was — a blank prompt keeps the page clean
+            cc.placeholderText = " ";
             emptied = true;
             await ctx.sync();
           }

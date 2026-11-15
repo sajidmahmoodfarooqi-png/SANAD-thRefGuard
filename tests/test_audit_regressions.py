@@ -493,3 +493,11 @@ def test_addin_never_wraps_the_live_selection():
 def test_addin_does_not_wipe_a_list_when_the_library_does_not_match():
     # the empty-list branch must check the document really has no citations left
     assert "present.length" in TASKPANE.split("if (!entries.length)")[1].split("try {")[0]
+
+
+def test_addin_blanks_the_prompt_of_an_emptied_list():
+    """An emptied control shows Word's grey "Click or tap here to enter text."
+    where the reference list was (seen in real Word). The emptying branch must
+    blank the control's prompt as well as clearing it."""
+    emptying = TASKPANE.split("if (!entries.length)")[1].split("emptied = true")[0]
+    assert "cc.clear()" in emptying and 'cc.placeholderText = " "' in emptying
