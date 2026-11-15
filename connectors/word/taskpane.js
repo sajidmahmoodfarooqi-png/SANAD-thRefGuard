@@ -181,6 +181,11 @@ async function insertCitation(refId) {
       cc.title = res.citation_id;     // stash the stable UUID for re-resolving / scanning
       cc.appearance = "BoundingBox";
       cc.insertText(res.rendered_text, Word.InsertLocation.replace);
+      // Leave the cursor just AFTER the citation. Left where it was, it sits in
+      // front of the citation — so the author's next words land before it, and
+      // one press of End or the right arrow puts them INSIDE the citation box
+      // (seen in real Word), where a later refresh would overwrite them.
+      cc.getRange("After").select();
       await ctx.sync();
     });
   } catch (e) {
