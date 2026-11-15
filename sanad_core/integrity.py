@@ -24,6 +24,8 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import unicodedata
+from collections import Counter
 
 from . import db, embedding
 
@@ -68,7 +70,10 @@ R8_DEFAULT_THRESHOLD = 0.11
 R8_SUGGESTION_TOPK = 3
 
 _YEAR_RE = re.compile(r"\b(1[5-9]\d{2}|20\d{2})[a-z]?\b")
-_TITLE_TOKEN_RE = re.compile(r"[a-z0-9]+")
+# words of ANY script (Urdu/Arabic titles included) -- an ASCII-only pattern saw
+# no words at all in an Urdu title, so R6 could neither match two Urdu
+# duplicates nor tell two different Urdu titles apart
+_TITLE_TOKEN_RE = re.compile(r"[^\W_]+")
 # a few function words that add noise but no identity to a title-overlap check
 _TITLE_STOPWORDS = frozenset(
     {"the", "a", "an", "of", "and", "or", "in", "on", "for", "to", "with", "from"}
@@ -92,8 +97,24 @@ def _years_in_text(raw: str | None) -> set[int]:
 
 
 def _title_tokens(title: str | None) -> set[str]:
-    return {t for t in _TITLE_TOKEN_RE.findall((title or "").lower())
+    return {t for t in _TITLE_TOKEN_RE.findall(
+                unicodedata.normalize("NFKC", title or "").casefold())
             if t not in _TITLE_STOPWORDS}
+
+
+def _dominant_script(text: str | None) -> str:
+    """The writing system most of a text's letters belong to ('LATIN', 'ARABIC',
+    ...), or '' if it has no letters. Lets the lexical R8 fallback recognise a
+    sentence and a source written in different scripts -- a pair it cannot
+    compare by shared words at all."""
+    counts: Counter = Counter()
+    for ch in (text or "")[:600]:
+        if ch.isalpha():
+            try:
+                counts[unicodedata.name(ch).split()[0]] += 1
+            except ValueError:
+                continue
+    return counts.most_common(1)[0][0] if counts else ""
 
 
 def _title_similarity(a: str | None, b: str | None) -> float:
@@ -146,12 +167,21 @@ def _load_reference(conn: sqlite3.Connection, rid: str) -> dict | None:
 class _Context:
     """Everything the rules need, gathered once per scan."""
 
-    def __init__(self, conn: sqlite3.Connection, document_id: str):
+    def __init__(self, conn: sqlite3.Connection, document_id: str,
+                 present_control_ids=None):
         self.document_id = document_id
         rows = conn.execute(
             "SELECT id, reference_ids, raw_original_text FROM citation "
             "WHERE document_id = ?", (document_id,),
         ).fetchall()
+        # When the add-in reports which citation controls are actually in the
+        # document, only those are checked. A citation the user has since
+        # deleted in Word still has a row here until the reference list is next
+        # rebuilt; reporting problems "in" a citation that is no longer in the
+        # text would send the user hunting for something that isn't there.
+        if present_control_ids is not None:
+            present = set(present_control_ids)
+            rows = [r for r in rows if r["id"] in present]
 
         self.citations: list[dict] = []
         self.refs: dict[str, dict] = {}          # resolved references, by id
@@ -266,7 +296,7 @@ def r3_orphaned_citation(ctx: _Context, present_control_ids=None) -> list[dict]:
                     "R3_ORPHANED_CITATION", "error",
                     f"Citation control {ctrl_id} exists in the document but has "
                     f"no backing record in the library.",
-                    citation_id=ctrl_id))
+                    citation_id=ctrl_id, suggestion={"control_id": ctrl_id}))
     return out
 
 
@@ -410,17 +440,30 @@ def r8_context_misalignment(ctx: _Context, contexts: dict | None, embedder,
     ref_vec = {rid: vectors[i] for i, rid in enumerate(pool_ids)}
     sent_vec = {c["id"]: vectors[len(pool_ids) + k] for k, (c, _) in enumerate(active)}
 
+    lexical = backend_family == "lexical-hash"
     out = []
-    for c, _sentence in active:
-        cited = [rid for rid in c["reference_ids"] if rid in ref_vec]
+    for c, sentence in active:
+        sv = sent_vec[c["id"]]
+        # No opinion without something to compare. An all-zero vector means the
+        # backend found nothing usable in the text; and the lexical fallback
+        # measures SHARED WORDS, so it cannot judge a sentence against a source
+        # written in another script (an Urdu sentence citing an English paper
+        # shares no words with it however apt the citation is). Either way the
+        # similarity would be a meaningless 0 and every such citation would be
+        # flagged -- so those pairs are left out rather than reported.
+        if not any(sv):
+            continue
+        cited = [rid for rid in c["reference_ids"] if rid in ref_vec and any(ref_vec[rid])]
+        if lexical:
+            script = _dominant_script(sentence)
+            cited = [rid for rid in cited if _dominant_script(pool[rid]) == script]
         if not cited:
             continue
-        sv = sent_vec[c["id"]]
         best_cited = max(embedding.cosine(sv, ref_vec[rid]) for rid in cited)
         if best_cited > threshold:
             continue  # the sentence is on-topic for what it cites -- fine
 
-        cited_set = set(cited)
+        cited_set = set(c["reference_ids"])   # never offer an already-cited source as "closer"
         ranked = sorted(
             ((rid, embedding.cosine(sv, ref_vec[rid]))
              for rid in ref_vec if rid not in cited_set),
@@ -461,7 +504,7 @@ def compute_flags(conn: sqlite3.Connection, document_id: str,
     """Run every rule and return flags in stable order (Tier-A R1-R7, then
     Tier-B R8 when an embedder + citing sentences are supplied). Pure: reads the
     library, writes nothing."""
-    ctx = _Context(conn, document_id)
+    ctx = _Context(conn, document_id, present_control_ids)
     flags: list[dict] = []
     flags += r1_year_mismatch(ctx)
     flags += r2_venue_type_sanity(ctx)
@@ -476,11 +519,15 @@ def compute_flags(conn: sqlite3.Connection, document_id: str,
 
 
 def _row_to_flag(row: sqlite3.Row) -> dict:
+    suggestion = json.loads(row["suggestion"]) if row["suggestion"] else None
     return {
         "id": row["id"], "document_id": row["document_id"],
-        "citation_id": row["citation_id"], "rule_id": row["rule_id"],
+        # an orphan-control finding has no citation row to point at, so its
+        # control id travels in the suggestion (see persist_flags)
+        "citation_id": row["citation_id"] or (suggestion or {}).get("control_id"),
+        "rule_id": row["rule_id"],
         "tier": row["tier"], "severity": row["severity"], "message": row["message"],
-        "suggestion": json.loads(row["suggestion"]) if row["suggestion"] else None,
+        "suggestion": suggestion,
         "status": row["status"], "created_at": row["created_at"],
     }
 
@@ -499,7 +546,7 @@ def _identity_key(rule_id: str, citation_id, suggestion) -> tuple:
         rids.append(str(sug["reference_id"]))
     for r in (sug.get("reference_ids") or []):
         rids.append(str(r))
-    return (rule_id, citation_id or "", tuple(sorted(set(rids))))
+    return (rule_id, citation_id or sug.get("control_id") or "", tuple(sorted(set(rids))))
 
 
 def persist_flags(conn: sqlite3.Connection, document_id: str, flags: list[dict]) -> None:
@@ -521,16 +568,30 @@ def persist_flags(conn: sqlite3.Connection, document_id: str, flags: list[dict])
         "DELETE FROM integrity_flag WHERE document_id = ? AND status = 'open'",
         (document_id,),
     )
+    # Flags reference their document and (optionally) a citation row, and the
+    # database enforces both links. Two findings legitimately have nothing to
+    # link to and used to abort the whole scan with a constraint error:
+    #   * a document scanned before SANAD has any record of it (no citation
+    #     inserted yet) -- so make sure its row exists;
+    #   * an orphan control (R3): by definition there is NO citation row for it
+    #     -- so it is stored with no citation link, its control id carried in
+    #     the suggestion and handed back as citation_id by _row_to_flag.
+    conn.execute("INSERT OR IGNORE INTO document (id) VALUES (?)", (document_id,))
+    known_citations = {r["id"] for r in conn.execute(
+        "SELECT id FROM citation WHERE document_id = ?", (document_id,))}
     now = db.now_iso()
     for f in flags:
         if _identity_key(f["rule_id"], f["citation_id"], f["suggestion"]) in suppressed:
             continue
+        linked_citation = f["citation_id"] if f["citation_id"] in known_citations else None
+        if f["citation_id"] and linked_citation is None:
+            f = {**f, "suggestion": {**(f["suggestion"] or {}), "control_id": f["citation_id"]}}
         conn.execute(
             "INSERT INTO integrity_flag "
             "(id, document_id, citation_id, rule_id, tier, severity, message, "
             " suggestion, status, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)",
-            (db.new_id(), document_id, f["citation_id"], f["rule_id"], f["tier"],
+            (db.new_id(), document_id, linked_citation, f["rule_id"], f["tier"],
              f["severity"], f["message"],
              json.dumps(f["suggestion"]) if f["suggestion"] is not None else None,
              now),

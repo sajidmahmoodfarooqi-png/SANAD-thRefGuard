@@ -121,7 +121,10 @@ def detect_rules(text: str) -> dict:
         form["line_spacing"] = 1.0; note("Line spacing", "Single (1.0)", m)
 
     # margins (inches or cm), taken near the word "margin"
-    m = re.search(r"margin[s]?[^.\n]{0,40}?(\d(?:\.\d+)?)\s*(inch|inches|in\b|\"|cm|mm)", low)
+    # the number is read WHOLE: (?<![\d.]) stops the lazy gap before it from
+    # swallowing leading digits, which turned "25 mm" into "5 mm" (0.5 cm) and
+    # "12.7 mm" into "2.7 mm"
+    m = re.search(r"margin[s]?[^.\n]{0,40}?(?<![\d.])(\d+(?:\.\d+)?)\s*(inch|inches|in\b|\"|cm|mm)", low)
     if m:
         val = float(m.group(1)); unit = m.group(2)
         cm = val * 2.54 if unit.startswith(("inch", "in", '"')) else (val / 10 if unit == "mm" else val)
@@ -129,7 +132,7 @@ def detect_rules(text: str) -> dict:
         note("Margins", f"{val} {unit}", m)
 
     # reference hanging indent
-    m = re.search(r"hanging[-\s]?indent[^.\n]{0,40}?(\d(?:\.\d+)?)\s*(inch|inches|in\b|\"|cm|mm)", low)
+    m = re.search(r"hanging[-\s]?indent[^.\n]{0,40}?(?<![\d.])(\d+(?:\.\d+)?)\s*(inch|inches|in\b|\"|cm|mm)", low)
     if m:
         val = float(m.group(1)); unit = m.group(2)
         cm = val * 2.54 if unit.startswith(("inch", "in", '"')) else (val / 10 if unit == "mm" else val)

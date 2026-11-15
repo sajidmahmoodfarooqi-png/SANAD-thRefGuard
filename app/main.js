@@ -7,7 +7,7 @@
 // main process only supervises it.
 
 const { app, BrowserWindow, shell, ipcMain, clipboard } = require("electron");
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
@@ -67,6 +67,8 @@ ipcMain.handle("sanad:copy", (_e, text) => { clipboard.writeText(String(text || 
 // The user re-pastes the new token into the add-in once.
 ipcMain.handle("sanad:regenerate-token", () => {
   try { fs.writeFileSync(tokenFilePath(), crypto.randomBytes(24).toString("hex"), { mode: 0o600 }); } catch (_) {}
+  stopCore();          // app.exit() skips the quit events, so stop the Core explicitly —
+                       // otherwise the old Core (old token) outlives the restart
   app.relaunch();
   app.exit(0);
 });
@@ -149,18 +151,46 @@ function createWindow(coreReady) {
   });
 }
 
+// One SANAD at a time. A second copy cannot start its own Core (the port is
+// taken), so it would silently ride on the first copy's — and go dead, with no
+// explanation, the moment the first window was closed. Instead, a second launch
+// just brings the existing window forward.
+const isFirstInstance = app.requestSingleInstanceLock();
+if (!isFirstInstance) app.quit();
+app.on("second-instance", () => {
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.focus();
+});
+
 app.whenReady().then(async () => {
+  if (!isFirstInstance) return;
   TOKEN = loadOrCreateToken();     // stable token (needs userData, so set here)
   startCore();
-  const ready = await waitForCore();
-  createWindow(ready);
+  // Open the window straight away instead of waiting for the Core. The installed
+  // Core is a one-file program that unpacks itself on every launch — measured at
+  // about 50 seconds on an ordinary laptop — and the old 25-second wait meant no
+  // window at all for 25 seconds, then one that said "Core not reachable". The
+  // window now says the engine is starting and connects by itself when it is up.
+  createWindow(false);
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow(ready);
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(coreProc !== null);
   });
+  waitForCore(180000).then((ok) => console.log(ok ? "[core] ready" : "[core] did not answer within 3 minutes"));
 });
 
 function stopCore() {
   if (coreProc && !coreProc.killed) {
+    // On Windows the packaged Core is a one-file executable: a small launcher
+    // process that starts the real service as its CHILD. kill() ends only the
+    // launcher, which can leave the service itself running on the port after
+    // SANAD has closed — still holding the OLD token after "Regenerate token".
+    // taskkill /T ends the whole process tree. It must run BEFORE kill(): once
+    // the launcher is gone the tree can no longer be found through it.
+    if (process.platform === "win32" && coreProc.pid) {
+      try { spawnSync("taskkill", ["/pid", String(coreProc.pid), "/T", "/F"], { windowsHide: true, timeout: 5000 }); }
+      catch (_) { /* best effort — kill() below still ends the launcher */ }
+    }
     coreProc.kill();
     coreProc = null;
   }

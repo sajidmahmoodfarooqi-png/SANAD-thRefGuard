@@ -80,11 +80,16 @@ def crossref_message_to_fields(msg: dict) -> tuple[dict, list[dict]]:
     fields["item_type"] = _TYPE_MAP.get(msg.get("type", ""), "article-journal")
     if msg.get("abstract"):
         fields["abstract"] = _clean_crossref_text(msg["abstract"])
-    authors = [
-        {"family": a.get("family", "").strip(), "given": a.get("given", "").strip()}
-        for a in (msg.get("author") or [])
-        if a.get("family") or a.get("given")
-    ]
+    authors = []
+    for a in (msg.get("author") or []):
+        if a.get("family") or a.get("given"):
+            authors.append({"family": (a.get("family") or "").strip(),
+                            "given": (a.get("given") or "").strip()})
+        elif a.get("name"):
+            # an organisation as author (WHO, a ministry, a consortium) comes
+            # back as {"name": ...} with no family/given -- keep it, or a report
+            # by a corporate body is stored with no author at all
+            authors.append({"literal": str(a["name"]).strip()})
     return fields, authors
 
 

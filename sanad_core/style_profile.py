@@ -79,15 +79,19 @@ def build_profile(form: dict) -> dict:
             ov[key] = bool(form[key])
 
     ps = p["paragraph_style"]
+    if form.get("font_family") is not None:
+        ps["font_family"] = str(form["font_family"])
     for fkey, pkey in (
-        ("font_family", "font_family"),
         ("font_size_pt", "font_size_pt"),
         ("line_spacing", "line_spacing"),
         ("hanging_indent_cm", "bibliography_hanging_indent_cm"),
         ("space_after_pt", "bibliography_space_after_pt"),
     ):
-        if form.get(fkey) is not None:
-            ps[pkey] = form[fkey]
+        val = form.get(fkey)
+        if val is not None:
+            # a number typed into a form can arrive as text ("12"); store it as
+            # a number (a non-number raises ValueError -> rejected by the API)
+            ps[pkey] = float(val) if isinstance(val, str) else val
 
     if isinstance(form.get("document_structure"), dict):
         p["document_structure"] = form["document_structure"]
@@ -224,9 +228,42 @@ def validate_profile(profile: dict) -> list[str]:
             citeproc_styles.get_style_filepath(profile["based_on_csl"])
         except Exception:
             errors.append(f"based_on_csl {profile['based_on_csl']!r} is not a known CSL style")
+    # Everything below is checked here, at save time, because a bad value saved
+    # into a profile does not fail until much later and much further away: it
+    # breaks every citation and the whole reference list of any document the
+    # profile is applied to.
     overrides = profile.get("csl_overrides") or {}
-    if "et_al_min" in overrides and not isinstance(overrides["et_al_min"], int):
-        errors.append("csl_overrides.et_al_min must be an integer")
+    if not isinstance(overrides, dict):
+        errors.append("csl_overrides must be an object")
+        overrides = {}
+    for key in ("et_al_min", "et_al_use_first"):
+        if key not in overrides:
+            continue
+        val = overrides[key]
+        if isinstance(val, bool) or not isinstance(val, int):
+            errors.append(f"csl_overrides.{key} must be an integer")
+        elif val < 1:
+            errors.append(f"csl_overrides.{key} must be 1 or more")
+    for key in ("ampersand_in_text", "ampersand_in_bibliography"):
+        if overrides.get(key) is not None and not isinstance(overrides[key], bool):
+            errors.append(f"csl_overrides.{key} must be true or false")
+
+    para = profile.get("paragraph_style") or {}
+    if not isinstance(para, dict):
+        errors.append("paragraph_style must be an object")
+        para = {}
+    for key in ("bibliography_hanging_indent_cm", "bibliography_space_after_pt",
+                "font_size_pt", "line_spacing"):
+        val = para.get(key)
+        if val is None:
+            continue
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or val < 0:
+            errors.append(f"paragraph_style.{key} must be a number (0 or more)")
+    if para.get("font_family") is not None and not isinstance(para["font_family"], str):
+        errors.append("paragraph_style.font_family must be text")
+    if profile.get("document_structure") is not None \
+            and not isinstance(profile["document_structure"], dict):
+        errors.append("document_structure must be an object")
     return errors
 
 
@@ -274,7 +311,11 @@ def save_profile(conn: sqlite3.Connection, profile: dict) -> str:
 
 
 def delete_profile(conn: sqlite3.Connection, profile_id: str) -> bool:
-    """Delete a style profile. Returns True if a row was removed."""
+    """Delete a style profile. Returns True if a row was removed. Any document
+    that was using it falls back to the default style (a document row points at
+    its profile, so the profile could not be deleted at all while one did)."""
+    conn.execute("UPDATE document SET style_profile_id = NULL WHERE style_profile_id = ?",
+                 (profile_id,))
     cur = conn.execute("DELETE FROM style_profile WHERE id = ?", (profile_id,))
     conn.commit()
     return cur.rowcount > 0
@@ -312,12 +353,13 @@ def patch_csl_style(base_style_id: str, overrides: dict) -> str:
     patched copy of the CSL XML (citeproc-py loads styles from a file path).
 
     v1.0 scope, deliberately: et_al_min/et_al_use_first (targeted, exact),
-    and a single global ampersand_in_text/ampersand_in_bibliography ->
-    and="symbol"|"text" swap (applied uniformly across the style, since
-    distinguishing citation-layout from bibliography-layout <name> elements
-    requires macro-context tracing this project has not built yet -- see
-    MVP_SPEC.md "Honest challenges"). Everything else in csl_overrides is
-    accepted but not yet wired; this is the intended v1.x expansion point.
+    and ampersand_in_text/ampersand_in_bibliography -> and="symbol" -> "text".
+    One setting asking for the word applies across the style; when the two
+    disagree, each is applied to the <name> elements its own layout prints
+    (traced through the macros that layout calls -- see _layout_name_elements).
+    Only "&" -> "and" is wired: True/None leave the style's own choice.
+    Everything else in csl_overrides is accepted but not yet wired; this is
+    the intended v1.x expansion point.
     """
     ov = overrides or {}
     return _patched_style_path(
@@ -359,16 +401,59 @@ def _patched_style_path(base_style_id, et_al_min, et_al_use_first, amp_text, amp
                 if "et_al_use_first" in overrides:
                     el.set("et-al-use-first", str(overrides["et_al_use_first"]))
 
-    want_text = overrides.get("ampersand_in_text") is False or \
-                overrides.get("ampersand_in_bibliography") is False
-    want_symbol = overrides.get("ampersand_in_text") is True or \
-                  overrides.get("ampersand_in_bibliography") is True
-    if want_text and not want_symbol:
-        for name_el in root.iter(f"{{{CSL_NS}}}name"):
-            if name_el.get("and") == "symbol":
-                name_el.set("and", "text")
+    # "&" -> "and". False means "write the word"; True/None means "leave the
+    # style's own choice". When only one of the two settings asks for the word
+    # (or both do), it applies to the whole style, as it always has. When they
+    # DISAGREE -- "and" in the text but "&" kept in the reference list, which is
+    # exactly what the profile builder's checkbox produces -- each setting is
+    # applied to the names its own layout uses. (Before this, a disagreement
+    # changed nothing at all, so that checkbox silently had no effect.)
+    text_word = overrides.get("ampersand_in_text") is False
+    bib_word = overrides.get("ampersand_in_bibliography") is False
+    keep_text_symbol = overrides.get("ampersand_in_text") is True
+    keep_bib_symbol = overrides.get("ampersand_in_bibliography") is True
+    targets: list = []
+    if (text_word and not keep_bib_symbol) or (bib_word and not keep_text_symbol):
+        targets = list(root.iter(f"{{{CSL_NS}}}name"))
+    elif text_word or bib_word:
+        in_citation = _layout_name_elements(root, "citation")
+        in_bibliography = _layout_name_elements(root, "bibliography")
+        mine, other = (in_citation, in_bibliography) if text_word else (in_bibliography, in_citation)
+        other_ids = {id(el) for el in other}
+        targets = [el for el in mine if id(el) not in other_ids]
+    for name_el in targets:
+        if name_el.get("and") == "symbol":
+            name_el.set("and", "text")
 
+    import os
     import tempfile
     fd, tmp_path = tempfile.mkstemp(suffix=".csl", prefix="sanad_style_")
+    os.close(fd)   # mkstemp hands back an OPEN handle; tree.write reopens by path
     tree.write(tmp_path, encoding="utf-8", xml_declaration=True)
     return tmp_path
+
+
+def _layout_name_elements(root, layout_tag: str) -> list:
+    """Every <name> element the <citation> (or <bibliography>) layout can
+    render: those written directly inside it, plus those inside any macro it
+    calls, followed transitively. This is what tells an in-text author list
+    apart from a reference-list one, which CSL styles keep in separate macros."""
+    section = root.find(f"{{{CSL_NS}}}{layout_tag}")
+    if section is None:
+        return []
+    macros = {m.get("name"): m for m in root.findall(f"{{{CSL_NS}}}macro")}
+    # Start from the <layout> only -- what is actually printed. The section's
+    # <sort> keys also call macros (APA sorts its in-text citations by the
+    # reference-list author macro), but a sort key never renders, and counting
+    # it made the reference-list names look "shared" with the in-text ones.
+    names, visited = [], set()
+    pending = list(section.findall(f"{{{CSL_NS}}}layout"))
+    while pending:
+        for node in pending.pop().iter():
+            if node.tag == f"{{{CSL_NS}}}name":
+                names.append(node)
+            called = node.get("macro")
+            if called and called in macros and called not in visited:
+                visited.add(called)
+                pending.append(macros[called])
+    return names

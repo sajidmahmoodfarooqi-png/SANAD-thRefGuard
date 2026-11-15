@@ -146,6 +146,15 @@ def _write_token_file(db_path, token: str) -> None:
         pass
 
 
+def _same_secret(presented: str, expected: str) -> bool:
+    """Constant-time comparison of a presented credential with the real one.
+    Compared as bytes: secrets.compare_digest refuses text containing non-ASCII
+    characters by raising, which turned a junk Authorization header into a
+    server error instead of a clean 'unauthorized'."""
+    return secrets.compare_digest(presented.encode("utf-8", "surrogatepass"),
+                                  expected.encode("utf-8"))
+
+
 # --------------------------------------------------------------------------- #
 # app factory
 # --------------------------------------------------------------------------- #
@@ -183,8 +192,7 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
         # preflight and the liveness probe are open; everything else needs the token
         if request.method == "OPTIONS" or request.url.path == "/v1/health":
             return await call_next(request)
-        if not secrets.compare_digest(request.headers.get("authorization", ""),
-                                      f"Bearer {token}"):
+        if not _same_secret(request.headers.get("authorization", ""), f"Bearer {token}"):
             return JSONResponse({"detail": "unauthorized"}, status_code=401)
         return await call_next(request)
 
@@ -319,8 +327,17 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
                 data = base64.b64decode(req.data_b64, validate=True)
             except Exception:
                 raise HTTPException(400, "data_b64 is not valid base64")
-            rows = (list_import.parse_xlsx(data) if fmt == "xlsx"
-                    else list_import.parse_docx(data))
+            try:
+                rows = (list_import.parse_xlsx(data) if fmt == "xlsx"
+                        else list_import.parse_docx(data))
+            except Exception:
+                # not a real .xlsx/.docx (a renamed file, an old binary .xls or
+                # .doc, a damaged download): say so plainly instead of failing
+                # with an internal error the user can do nothing with
+                old = ".xls" if fmt == "xlsx" else ".doc"
+                raise HTTPException(
+                    400, f"That file could not be read as a .{fmt} file. If it is an older "
+                         f"{old} file, open it and save it again as .{fmt}, then import that.")
         else:
             raise HTTPException(400, f"unknown import format {req.format!r} "
                                      "(expected ris | bibtex | typed | csv | xlsx | docx)")
@@ -337,7 +354,10 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
                 ids.append(rid)
         conn.commit()
         count = conn.execute("SELECT COUNT(*) c FROM reference").fetchone()["c"]
-        return {"imported": len(ids), "library_size": count, "resolved": resolved}
+        # `ids` (in input order, one per accepted row) lets a caller act on
+        # exactly what it just imported without searching for it again.
+        return {"imported": len(ids), "library_size": count, "resolved": resolved,
+                "ids": ids}
 
     @app.post("/v1/library/search-titles")
     def library_search_titles(req: SearchTitlesRequest):
@@ -357,6 +377,8 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
         # Insert exactly the one candidate the user explicitly chose from a
         # title search. No search or matching happens here -- this only ever
         # inserts what's handed to it, same as any other import path.
+        if not str(req.fields.get("title") or "").strip():
+            raise HTTPException(422, "a reference needs a title")
         rid = importer.insert_reference(conn, req.fields, req.authors)
         conn.commit()
         count = conn.execute("SELECT COUNT(*) c FROM reference").fetchone()["c"]
@@ -367,6 +389,12 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
     def citation_create(body: CitationCreate, conn=Depends(get_conn)):
         if not body.reference_ids:
             raise HTTPException(400, "reference_ids must not be empty")
+        # A citation that points at nothing in the library renders as an empty
+        # string, and the add-in would place an empty, invisible citation in the
+        # document. Refuse it here. (One dead id inside an otherwise-live group
+        # is still allowed -- that is what integrity rule R4 reports.)
+        if not documents.any_reference_exists(conn, body.reference_ids):
+            raise HTTPException(404, "none of those references are in the library")
         cid, rendered = documents.create_citation(
             conn, body.document_id, body.reference_ids, body.raw_original_text
         )
@@ -374,6 +402,12 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
 
     @app.put("/v1/citations/{citation_id}")
     def citation_update(citation_id: str, body: CitationUpdate, conn=Depends(get_conn)):
+        if body.reference_ids is not None:
+            if documents.get_citation(conn, citation_id) is None:
+                raise HTTPException(404, f"no citation {citation_id!r}")
+            # swapping in sources that aren't in the library would blank the citation
+            if not documents.any_reference_exists(conn, body.reference_ids):
+                raise HTTPException(404, "none of those references are in the library")
         rendered = documents.rerender_citation(conn, citation_id, body.reference_ids)
         if rendered is None:
             raise HTTPException(404, f"no citation {citation_id!r}")
@@ -391,6 +425,12 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
         # actually present in the document (present_control_ids), so a citation
         # the user deleted in Word drops out of the reference list.
         return documents.bibliography_payload(conn, document_id, body.present_control_ids)
+
+    @app.delete("/v1/documents/{document_id}")
+    def document_delete(document_id: str, conn=Depends(get_conn)):
+        # forget SANAD's bookkeeping for a document (citations + findings). The
+        # library and the user's file are untouched. Idempotent.
+        return documents.delete_document(conn, document_id)
 
     # -- integrity scan: Tier-A + Tier-B engine, LIVE ----------------------- #
     @app.post("/v1/documents/{document_id}/scan")
@@ -444,7 +484,11 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
     @app.post("/v1/style-profiles/build")
     def style_profile_build(form: dict, conn=Depends(get_conn)):
         # the guided-form backend: friendly answers -> a full .sanadstyle.json
-        profile = sp.build_profile(form)
+        try:
+            profile = sp.build_profile(form)
+        except (ValueError, TypeError):
+            # a number field that isn't a number (e.g. margin "wide")
+            raise HTTPException(422, {"errors": ["one of the numeric fields is not a number"]})
         errors = sp.validate_profile(profile)
         if errors:
             raise HTTPException(422, {"errors": errors})
@@ -555,7 +599,7 @@ def create_app(db_path: str | Path = "sanad_library.db") -> FastAPI:
     async def events(ws: WebSocket):
         # a browser WebSocket cannot set an Authorization header, so the token
         # is passed as a query parameter (?token=...) and checked before accept.
-        if not secrets.compare_digest(ws.query_params.get("token", ""), token):
+        if not _same_secret(ws.query_params.get("token", ""), token):
             await ws.close(code=1008)  # policy violation
             return
         await ws.accept()

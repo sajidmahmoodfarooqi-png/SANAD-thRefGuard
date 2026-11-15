@@ -12,6 +12,7 @@ path here that could touch an author's writing.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 
 from . import db, formatter
@@ -42,6 +43,14 @@ def _csl_items_for_refs(conn: sqlite3.Connection, reference_ids: list[str]) -> l
     return items
 
 
+def any_reference_exists(conn: sqlite3.Connection, reference_ids: list[str]) -> bool:
+    """True if at least one of the given ids is a reference in the library."""
+    for rid in reference_ids or []:
+        if conn.execute("SELECT 1 FROM reference WHERE id = ?", (rid,)).fetchone():
+            return True
+    return False
+
+
 # --------------------------------------------------------------------------- #
 # documents
 # --------------------------------------------------------------------------- #
@@ -70,6 +79,22 @@ def set_document_profile(conn: sqlite3.Connection, document_id: str, profile_id:
     for row in rows:
         rerender_citation(conn, row["id"])
     return len(rows)
+
+
+def delete_document(conn: sqlite3.Connection, document_id: str) -> dict:
+    """Forget a document: its integrity findings, its citation records and the
+    document row itself. The library (references) is untouched, and so is the
+    .docx -- SANAD only ever held bookkeeping about it. Used to clear the
+    built-in sample check so it leaves nothing behind in a real library."""
+    flags = conn.execute(
+        "DELETE FROM integrity_flag WHERE document_id = ? OR citation_id IN "
+        "(SELECT id FROM citation WHERE document_id = ?)", (document_id, document_id),
+    ).rowcount
+    citations = conn.execute(
+        "DELETE FROM citation WHERE document_id = ?", (document_id,)).rowcount
+    removed = conn.execute("DELETE FROM document WHERE id = ?", (document_id,)).rowcount
+    conn.commit()
+    return {"deleted": removed, "citations": citations, "flags": flags}
 
 
 # --------------------------------------------------------------------------- #
@@ -118,19 +143,51 @@ def find_duplicate_groups(conn: sqlite3.Connection) -> list[dict]:
     2. **Near-duplicate** -- the same normalised title *and* year, for records not
        already grouped above. This catches the common case of one paper entered
        twice: a full record (DOI + authors + metadata) and a bare re-entry (title
-       + year only). A group spanning two *different* DOIs is skipped -- that
-       signals genuinely distinct works (e.g. an erratum), left for human review.
+       + year only). A group spanning two *different* DOIs, lead authors, volumes
+       or first pages is skipped -- that signals genuinely distinct works (an
+       erratum, or two pieces that merely share a generic title such as
+       "Introduction"), left for human review.
 
     Each group names the canonical keeper (the richest copy) plus the extras."""
     from .importer import normalize_doi, normalize_title
     rows = conn.execute(
-        """SELECT id, title, year, doi, content_sig, created_at
+        """SELECT id, title, year, doi, volume, pages, content_sig, created_at
              FROM reference ORDER BY created_at, id"""
     ).fetchall()
     author_count = {
         r["reference_id"]: r["c"] for r in conn.execute(
             "SELECT reference_id, COUNT(*) c FROM reference_author GROUP BY reference_id")
     }
+    # lead (first-listed) author of each reference, normalised for comparison
+    lead_author: dict[str, str] = {}
+    for r in conn.execute(
+            """SELECT ra.reference_id, a.family, a.literal FROM reference_author ra
+                 JOIN author a ON a.id = ra.author_id
+                ORDER BY ra.reference_id, ra.position"""):
+        if r["reference_id"] not in lead_author:
+            lead_author[r["reference_id"]] = normalize_title(r["family"] or r["literal"] or "")
+
+    def _distinct_works(members: list) -> bool:
+        """True when a same-title-same-year group visibly holds DIFFERENT works,
+        so it must not be auto-merged: two different lead authors, or two
+        different volumes / first pages. "Introduction", "Editorial", "Preface"
+        and "Book review" are each the title of thousands of separate pieces;
+        title + year alone is not identity. A copy with no author / volume /
+        page on file is compatible with anything (that is the bare re-entry
+        this pass exists to catch). Skipped groups are not lost -- they surface
+        under Library health -> Possible duplicates for a human decision."""
+        def first_number(value) -> str:
+            m = re.search(r"\d+", str(value or ""))
+            return m.group(0) if m else ""
+        for values in (
+            {lead_author[m["id"]] for m in members if lead_author.get(m["id"])},
+            {str(m["volume"]).strip().lower() for m in members
+             if str(m["volume"] or "").strip()},
+            {first_number(m["pages"]) for m in members if first_number(m["pages"])},
+        ):
+            if len(values) > 1:
+                return True
+        return False
     assigned: set = set()
     out: list = []
 
@@ -165,6 +222,8 @@ def find_duplicate_groups(conn: sqlite3.Connection) -> list[dict]:
         dois.discard(None)
         if len(dois) > 1:
             continue  # conflicting DOIs -> genuinely different works; leave for review
+        if _distinct_works(members):
+            continue  # different author / volume / page -> not the same work
         keep = _pick_keeper(members, author_count)
         out.append({"keep": keep["id"], "title": keep["title"],
                     "remove": [m["id"] for m in members if m["id"] != keep["id"]]})
@@ -460,7 +519,19 @@ def repair_or_remove_malformed(conn: sqlite3.Connection, fetch=None) -> dict:
             continue
         try:
             data = fetch(resolver.CROSSREF + urllib.parse.quote(doi))
-        except (NetworkEgressBlocked, urllib.error.URLError, TimeoutError, OSError):
+        except urllib.error.HTTPError as exc:
+            # Crossref ANSWERED. A 404 is its definite "no such DOI" -- that is
+            # the unresolvable case, handled below (remove). Any other status
+            # (rate limit, server fault) says nothing about the DOI, so the
+            # entry is left alone. (HTTPError is also a URLError, so it must be
+            # caught first or a 404 is misreported as "no connection" and the
+            # entry can never be cleaned up.)
+            if exc.code != 404:
+                skipped.append({"id": r["id"], "doi": doi,
+                                "reason": f"Crossref returned an error ({exc.code})"})
+                continue
+            data = None
+        except (NetworkEgressBlocked, urllib.error.URLError, TimeoutError, OSError, ValueError):
             skipped.append({"id": r["id"], "doi": doi, "reason": "couldn't reach Crossref"})
             continue
         msg = (data or {}).get("message")
@@ -500,6 +571,7 @@ def search_library(conn: sqlite3.Connection, q: str, limit: int = 20) -> list[di
     # author name (family/given/literal) and year -- so "Khan 2025", "urban Khan",
     # or "Khan et al." all find the right reference, not just an exact substring.
     tokens = _search_tokens(q)
+    limit = max(1, min(int(limit), 200))   # a typeahead, never an unbounded dump
     if not tokens:
         return []
 
@@ -643,6 +715,11 @@ def reconcile_present_citations(conn: sqlite3.Connection, document_id: str,
         "SELECT id FROM citation WHERE document_id = ?", (document_id,)).fetchall()
     stale = [r["id"] for r in rows if r["id"] not in present]
     for cid in stale:
+        # findings recorded against a citation that no longer exists go with it
+        # (they point at the row, so the row could not be deleted while any
+        # remained -- rebuilding the list after deleting a flagged citation in
+        # Word failed outright)
+        conn.execute("DELETE FROM integrity_flag WHERE citation_id = ?", (cid,))
         conn.execute("DELETE FROM citation WHERE id = ?", (cid,))
     if stale:
         conn.commit()
